@@ -19,7 +19,7 @@ export default function App() {
   // Obtener pestaña inicial desde el hash de la URL o localStorage (ej: #accounts -> 'accounts')
   const getInitialTab = () => {
     const hash = window.location.hash.replace('#', '').trim();
-    const validTabs = ['studio', 'vault', 'templates', 'queue', 'accounts', 'settings', 'channels'];
+    const validTabs = ['studio', 'vault', 'templates', 'queue', 'images', 'accounts', 'settings', 'channels'];
     if (hash && validTabs.includes(hash)) return hash;
     return localStorage.getItem('lastActiveTab') || 'studio';
   };
@@ -37,7 +37,7 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '').trim();
-      const validTabs = ['studio', 'vault', 'templates', 'queue', 'accounts', 'settings', 'channels'];
+      const validTabs = ['studio', 'vault', 'templates', 'queue', 'images', 'accounts', 'settings', 'channels'];
       if (hash && validTabs.includes(hash)) {
         setActiveTabState(hash);
         localStorage.setItem('lastActiveTab', hash);
@@ -80,7 +80,8 @@ export default function App() {
 
   // Parámetros de Generación estilo Google Flow (Video & Imagen)
   const [publishingMode, setPublishingMode] = useState(localStorage.getItem('publishingMode') || 'manual'); // 'manual' (revisar antes de publicar) | 'auto' (publicar directo al terminar render)
-  const [publishingJobId, setPublishingJobId] = useState(null); // ID del video enviándose por webhook
+  const [publishingJobId, setPublishingJobId] = useState(null);
+  const [publishingImageId, setPublishingImageId] = useState(null); // ID del video enviándose por webhook
 
   // Widget de Automatización de Publicación Diaria (Jardinería / Mr. Green)
   const defaultAutoConfig = {
@@ -974,6 +975,62 @@ export default function App() {
     }
   }
 
+  // Publicar manualmente una imagen complementaria satélite a Facebook
+  async function handlePublishImage(item) {
+    if (!item.image_url) {
+      showToast('⚠️ Esta imagen aún no tiene URL generada');
+      return;
+    }
+    try {
+      setPublishingImageId(item.id);
+      showToast('🚀 Despachando imagen a Facebook...');
+      await fetch('https://n8n.koratflow.agency/webhook/publish-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: item.id,
+          publish_target: 'photo',
+          image_url: item.image_url,
+          copy_text: item.image_copy_text || item.copy_text || '¿Qué opinas sobre este proceso? #MrGreen #HuertoEnCasa',
+          title: item.title,
+          brand_id: item.brand_id || selectedBrand?.id
+        })
+      });
+
+      // Actualizar en base de datos para registrar despacho y eliminar de la galería activa
+      await supabase.from('video_jobs').update({
+        image_status: 'published',
+        image_published_at: new Date().toISOString()
+      }).eq('id', item.id);
+
+      showToast('✅ ¡Imagen publicada exitosamente en Facebook!');
+      fetchData();
+    } catch (err) {
+      console.error('Error publicando imagen:', err);
+      showToast('⚠️ Despachada (señal enviada a Facebook)');
+      await supabase.from('video_jobs').update({
+        image_status: 'published',
+        image_published_at: new Date().toISOString()
+      }).eq('id', item.id);
+      fetchData();
+    } finally {
+      setPublishingImageId(null);
+    }
+  }
+
+  // Eliminar o archivar imagen de la cola sin publicarla
+  async function handleDismissImage(itemId) {
+    try {
+      await supabase.from('video_jobs').update({
+        image_status: 'dismissed'
+      }).eq('id', itemId);
+      showToast('🗑️ Imagen removida de la galería de despacho');
+      fetchData();
+    } catch (err) {
+      showToast('Error removiendo imagen: ' + err.message);
+    }
+  }
+
   // Publicar manualmente un video aprobado hacia la página / redes vía n8n webhook (Feed/Reels o Historias Independientes)
   async function handlePublishToSocial(vid, targetType = 'reel') {
     if (!vid.final_video_url) {
@@ -1189,6 +1246,24 @@ export default function App() {
               {videos.length > 0 && (
                 <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-black">
                   {videos.length}
+                </span>
+              )}
+            </button>
+
+            {/* Pestaña Principal 3: Galería y Despacho de Imágenes */}
+            <button
+              onClick={() => setActiveTab('images')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left font-bold ${
+                activeTab === 'images'
+                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 shadow-xs'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <ImageIcon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              3. Galería de Imágenes
+              {videos.filter(v => v.image_url && v.image_status !== 'published' && v.image_status !== 'dismissed').length > 0 && (
+                <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 font-black">
+                  {videos.filter(v => v.image_url && v.image_status !== 'published' && v.image_status !== 'dismissed').length}
                 </span>
               )}
             </button>
@@ -2907,12 +2982,37 @@ export default function App() {
                         </div>
 
                         {/* Botón de Publicación Manual hacia Facebook / Redes */}
+                        {/* Botones de Publicación Manual hacia Facebook (Reels & Historias) */}
                         {vid.final_video_url && (
                           <div className="pt-2 border-t border-[var(--border-color)] space-y-2">
                             {vid.status === 'published' ? (
-                              <div className="w-full py-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-bold text-xs flex items-center justify-center gap-2">
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                <span>Publicado en tu Página de Facebook</span>
+                              <div className="space-y-2">
+                                <div className="w-full py-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-bold text-xs flex items-center justify-center gap-2">
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                  <span>Publicado en tu Página de Facebook (Reel)</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={publishingJobId === vid.id}
+                                    onClick={() => handlePublishToSocial(vid, 'story')}
+                                    className="w-full py-2 px-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50"
+                                    title="Subir de nuevo o reforzar como Historia Independiente en Facebook Stories"
+                                  >
+                                    <Share2 className="w-3.5 h-3.5" />
+                                    <span>{publishingJobId === vid.id ? 'Subiendo Historia...' : '📲 Subir como Historia'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={publishingJobId === vid.id}
+                                    onClick={() => handlePublishToSocial(vid, 'reel')}
+                                    className="w-full py-2 px-2.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-subtle)] hover:bg-blue-600 hover:text-white text-[var(--text-secondary)] font-bold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                                    title="Volver a enviar como Reel a Facebook"
+                                  >
+                                    <Send className="w-3.5 h-3.5" />
+                                    <span>Re-publicar Reel</span>
+                                  </button>
+                                </div>
                               </div>
                             ) : (
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2921,10 +3021,10 @@ export default function App() {
                                   disabled={publishingJobId === vid.id}
                                   onClick={() => handlePublishToSocial(vid, 'reel')}
                                   className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50"
-                                  title="Subir a Facebook Reels & Feed principal"
+                                  title="Subir a Facebook Reels & Feed principal (y programa la Historia automáticamente)"
                                 >
                                   <Send className={`w-3.5 h-3.5 ${publishingJobId === vid.id ? 'animate-bounce' : ''}`} />
-                                  <span>{publishingJobId === vid.id ? 'Enviando...' : '🎬 Subir como Reel'}</span>
+                                  <span>{publishingJobId === vid.id ? 'Enviando...' : '🚀 Subir como Reel'}</span>
                                 </button>
 
                                 <button
@@ -2935,7 +3035,7 @@ export default function App() {
                                   title="Subir como Historia Independiente a Facebook (Monetización directa en Stories)"
                                 >
                                   <Share2 className="w-3.5 h-3.5" />
-                                  <span>📱 Historia Independiente</span>
+                                  <span>📲 Historia Independiente</span>
                                 </button>
                               </div>
                             )}
