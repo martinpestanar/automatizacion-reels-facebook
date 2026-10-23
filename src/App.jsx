@@ -478,12 +478,44 @@ export default function App() {
       }
 
       if (itemsToInsert.length > 0) {
-        // Inserción en lote (Batch Insert) mucho más rápida y sin timeouts
-        const { error: insertError } = await supabase.from('content_vault').insert(itemsToInsert);
+        // 1. Filtrar duplicados contra content_vault y video_jobs existentes
+        const { data: existingVault } = await supabase.from('content_vault').select('title');
+        const { data: existingJobs } = await supabase.from('video_jobs').select('title');
+
+        const existingTitles = new Set([
+          ...(existingVault || []).map(v => (v.title || '').trim().toLowerCase()),
+          ...(existingJobs || []).map(j => (j.title || '').trim().toLowerCase())
+        ]);
+
+        const uniqueItems = [];
+        let duplicateCount = 0;
+
+        for (const item of itemsToInsert) {
+          const tLower = (item.title || '').trim().toLowerCase();
+          if (existingTitles.has(tLower)) {
+            duplicateCount++;
+          } else {
+            existingTitles.add(tLower);
+            uniqueItems.push(item);
+          }
+        }
+
+        if (uniqueItems.length === 0) {
+          showToast(`⚠️ Todos los ${itemsToInsert.length} guiones ya existen en tu Banco o ya fueron procesados. No se agregaron duplicados.`);
+          setIsGenerating(false);
+          return;
+        }
+
+        // Inserción en lote únicamente de los guiones nuevos
+        const { error: insertError } = await supabase.from('content_vault').insert(uniqueItems);
         if (insertError) throw insertError;
 
         setParsedBatchCount(itemsToInsert.length);
-        showToast(`🎉 ¡${itemsToInsert.length} videos guardados en tu Banco de Contenido!`);
+        if (duplicateCount > 0) {
+          showToast(`🎉 ¡${uniqueItems.length} videos guardados! (Se omitieron ${duplicateCount} duplicados ya existentes)`);
+        } else {
+          showToast(`🎉 ¡${uniqueItems.length} videos nuevos guardados en tu Banco de Contenido!`);
+        }
         setRawBatchText('');
         fetchData();
         setActiveTab('vault');
