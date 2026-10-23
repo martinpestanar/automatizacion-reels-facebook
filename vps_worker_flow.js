@@ -465,6 +465,14 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
         status: 'ready_to_publish',
         error_message: null
       }).eq('id', job.id);
+
+      // Auto-eliminar del banco de contenido cuando el video ya está 100% renderizado
+      try {
+        await supabase.from('content_vault').delete().eq('title', job.title);
+        console.log(`[Cleaner] 🗑️ Removido de content_vault tras render exitoso: "${job.title}"`);
+      } catch (cleanErr) {
+        console.warn('[Cleaner] Error limpiando content_vault:', cleanErr.message);
+      }
     }
 
     // 4. GENERACIÓN AUTOMÁTICA DE IMAGEN SATÉLITE EN GOOGLE FLOW (NANO BANANA - 0 CRÉDITOS)
