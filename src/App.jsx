@@ -2005,15 +2005,17 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {filtered.map((item) => {
                         const isSelected = selectedVaultIds.has(item.id);
-                        const isInQueue = item.status === 'in_queue';
+                        const isInQueue = item.status === 'in_queue' || videos.some(v => v.title === item.title && (v.status === 'rendering' || v.status === 'ready_to_publish'));
 
                         return (
                           <div 
                             key={item.id} 
                             className={`p-5 rounded-3xl border transition-all shadow-xs space-y-3 relative ${
-                              isSelected 
-                                ? 'border-amber-500 bg-amber-500/5 ring-2 ring-amber-500/30' 
-                                : 'border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-stone-400 dark:hover:border-stone-600'
+                              isInQueue
+                                ? 'opacity-60 bg-[var(--bg-subtle)] border-dashed border-emerald-500/40 grayscale-30'
+                                : isSelected 
+                                  ? 'border-amber-500 bg-amber-500/5 ring-2 ring-amber-500/30' 
+                                  : 'border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-stone-400 dark:hover:border-stone-600'
                             }`}
                           >
                             <div className="flex items-start justify-between gap-3">
@@ -2021,8 +2023,9 @@ export default function App() {
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
+                                  disabled={isInQueue}
                                   onChange={() => toggleVaultSelection(item.id)}
-                                  className="mt-1 w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-stone-300 dark:border-stone-600 cursor-pointer"
+                                  className={`mt-1 w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-stone-300 dark:border-stone-600 ${isInQueue ? 'cursor-not-allowed opacity-30' : 'cursor-pointer'}`}
                                 />
                                 <div>
                                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -2143,19 +2146,29 @@ export default function App() {
                               <div className="flex items-center gap-2">
                                 <button
                                   type="button"
+                                  disabled={isInQueue}
                                   onClick={() => handleSendVaultToQueue(item, 'scene_1')}
-                                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[var(--bg-subtle)] hover:bg-amber-600 hover:text-white border border-[var(--border-color)] text-xs font-bold transition cursor-pointer"
+                                  className={`flex items-center gap-1 px-3 py-1.5 rounded-xl border border-[var(--border-color)] text-xs font-bold transition ${
+                                    isInQueue 
+                                      ? 'opacity-40 cursor-not-allowed bg-stone-200 dark:bg-stone-800 text-stone-400' 
+                                      : 'bg-[var(--bg-subtle)] hover:bg-amber-600 hover:text-white cursor-pointer'
+                                  }`}
                                   title="Renderiza únicamente la primera escena (gancho) para validar calidad visual"
                                 >
                                   🎬 Test Escena 1
                                 </button>
                                 <button
                                   type="button"
+                                  disabled={isInQueue}
                                   onClick={() => handleSendVaultToQueue(item, 'all')}
-                                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm cursor-pointer"
-                                  title="Despacha el video completo de 3 escenas a la cola de Google Flow"
+                                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition shadow-sm ${
+                                    isInQueue 
+                                      ? 'bg-emerald-800/40 text-emerald-300/50 cursor-not-allowed border border-emerald-700/30' 
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                                  }`}
+                                  title={isInQueue ? "Ya se encuentra en cola de renderizado" : "Despacha el video completo de 3 escenas a la cola de Google Flow"}
                                 >
-                                  <Send className="w-3.5 h-3.5" /> Despachar Video
+                                  <Send className="w-3.5 h-3.5" /> {isInQueue ? '✓ En Cola' : 'Despachar Video'}
                                 </button>
                               </div>
                             </div>
