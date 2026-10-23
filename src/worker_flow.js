@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { stitchScenes } from './stitcher/index.js';
 import { getAvailableAccount, recordAccountUsage } from './accounts/rotator.js';
 
@@ -399,8 +400,39 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
       ]);
 
       await download.saveAs(clipPath);
+
+      // Verificación de integridad: Evitar que Flow entregue el clip anterior por error de caché
+      const clipBuffer = fs.readFileSync(clipPath);
+      const currentHash = crypto.createHash('md5').update(clipBuffer).digest('hex');
+      console.log(`🔍 Verificando integridad de Escena ${sc.num} (MD5: ${currentHash.slice(0, 8)}...)`);
+
+      if (downloadedClips.length > 0) {
+        const prevClipPath = downloadedClips[downloadedClips.length - 1];
+        const prevHash = crypto.createHash('md5').update(fs.readFileSync(prevClipPath)).digest('hex');
+        if (currentHash === prevHash) {
+          console.warn(`⚠️ ALERTA: La Escena ${sc.num} es IDÉNTICA a la anterior (duplicado en Flow). Reintentando descarga del último tile...`);
+          // Cerrar modal actual
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(1000);
+          // Tomar el tile más reciente de nuevo
+          const freshTile = page.locator('flow-video-tile, flow-grid-tile-container').first();
+          await freshTile.click({ force: true });
+          await page.waitForTimeout(2000);
+          const freshDl = page.locator('button[aria-label*="Descargar" i], button[aria-label*="Download" i]').first();
+          await freshDl.waitFor({ state: 'visible', timeout: 15000 });
+          await freshDl.click();
+          await page.waitForTimeout(1000);
+          const freshOpt = page.locator('.cdk-overlay-container button[role="menuitem"]:has-text("720p"), button[role="menuitem"]:has-text("720p")').first();
+          const [retryDl] = await Promise.all([
+            page.waitForEvent('download', { timeout: 35000 }),
+            freshOpt.click()
+          ]);
+          await retryDl.saveAs(clipPath);
+        }
+      }
+
       downloadedClips.push(clipPath);
-      console.log(`✅ Escena ${sc.num} descargada correctamente: ${clipPath}`);
+      console.log(`✅ Escena ${sc.num} descargada y validada correctamente: ${clipPath}`);
 
       // Subir de inmediato este clip individual a Supabase Storage
       try {
@@ -418,15 +450,20 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
         console.warn(`Aviso al subir clip ${sc.num} a Supabase:`, uploadErr.message);
       }
 
-      // Volver a la galería para la siguiente escena (cerrar modal o volver atrás)
-      const closeOrBackBtn = page.locator('button[aria-label*="Cerrar" i], button[aria-label*="Close" i], button[aria-label*="Atrás" i], button[aria-label*="Volver" i], button[aria-label*="Back" i], button:has-text("arrow_back"), button:has-text("close")').first();
-      if (await closeOrBackBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await closeOrBackBtn.click().catch(() => {});
-        await page.waitForTimeout(1500);
-      } else {
+      // Volver a la galería para la siguiente escena cerrando el visor de forma garantizada
+      console.log(`🔒 Cerrando visor de Escena ${sc.num} para volver al editor...`);
+      for (let attempt = 0; attempt < 3; attempt++) {
         await page.keyboard.press('Escape');
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(500);
+        const closeOrBackBtn = page.locator('button[aria-label*="Cerrar" i], button[aria-label*="Close" i], button[aria-label*="Atrás" i], button[aria-label*="Volver" i], button[aria-label*="Back" i], button:has-text("arrow_back"), button:has-text("close")').first();
+        if (await closeOrBackBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+          await closeOrBackBtn.click({ force: true }).catch(() => {});
+        }
       }
+      // Asegurar que el input de prompt esté libre y visible
+      const promptInput = page.locator('.ProseMirror, [contenteditable="true"]').first();
+      await promptInput.waitFor({ state: 'visible', timeout: 15000 });
+      await page.waitForTimeout(800);
     }
 
     if (downloadedClips.length === 0) {
@@ -499,24 +536,37 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
           await page.waitForTimeout(400);
         }
 
-        // Inyectar el prompt de imagen en el campo de texto de Flow
-        const promptInput = page.locator('textarea[placeholder*="Describe" i], textarea[aria-label*="prompt" i], textarea').first();
-        if (await promptInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-          await promptInput.fill(job.image_prompt.trim());
-          await page.waitForTimeout(400);
+        // Inyectar el prompt de imagen en el campo de texto de Flow (.ProseMirror o textarea)
+        let imgInput = page.locator('.ProseMirror, [contenteditable="true"]').first();
+        if (!(await imgInput.isVisible({ timeout: 3000 }).catch(() => false))) {
+          imgInput = page.locator('textarea[placeholder*="Describe" i], textarea[aria-label*="prompt" i], textarea').first();
+        }
 
-          // Clic en Generar
-          const generateBtn = page.locator('button:has-text("Generar"), button:has-text("Crear"), button:has-text("Generate")').first();
-          if (await generateBtn.isVisible()) {
-            await generateBtn.click();
-            console.log('⏳ Esperando procesamiento de imagen Nano Banana en Google Flow...');
-            await page.waitForTimeout(8000); // Nano Banana es casi instantáneo
+        if (await imgInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await imgInput.click({ force: true });
+          await page.keyboard.press('Control+A');
+          await page.keyboard.press('Backspace');
+          await page.keyboard.insertText(job.image_prompt.trim());
+          await page.waitForTimeout(600);
+
+          // Clic en Generar o Submit
+          const submitBtn = page.locator('button.generate-icon-button, button[aria-label*="generaci" i], button[aria-label*="generate" i], button:has-text("Generar"), button:has-text("Crear"), button:has-text("arrow_forward")').first();
+          if (await submitBtn.isVisible() && !(await submitBtn.isDisabled())) {
+            await submitBtn.click();
+          } else {
+            await page.keyboard.press('Enter');
+          }
+          console.log('⏳ Esperando procesamiento de imagen Nano Banana en Google Flow...');
+          await page.waitForTimeout(10000); // Esperar que Flow renderice la imagen
 
             // Buscar la última imagen en la galería de Flow
-            const generatedCard = page.locator('.asset-card, .gallery-item, mat-card, img').first();
-            if (await generatedCard.isVisible({ timeout: 15000 }).catch(() => false)) {
-              await generatedCard.click();
-              await page.waitForTimeout(1000);
+            console.log('🖼️ Localizando tarjeta de imagen generada en la galería de Flow...');
+            const generatedCard = page.locator('flow-image-tile, flow-grid-tile-container, flow-video-tile, .asset-card, .gallery-item, mat-card').first();
+            await generatedCard.waitFor({ state: 'visible', timeout: 25000 }).catch(() => {});
+
+            if (await generatedCard.isVisible().catch(() => false)) {
+              await generatedCard.click({ force: true });
+              await page.waitForTimeout(2000);
 
               // Descargar imagen
               const dlBtn = page.locator('button[aria-label*="Descargar" i], button[aria-label*="Download" i]').first();
@@ -539,6 +589,35 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
                     await supabase.from('video_jobs').update({
                       image_url: imgPubData.publicUrl
                     }).eq('id', job.id);
+                    console.log('✅ Imagen Satélite Nano Banana guardada en Supabase:', imgPubData.publicUrl);
+
+                    // AUTO-DESPACHO A FACEBOOK POR DEFAULT
+                    try {
+                      console.log('🚀 Despachando automáticamente imagen complementaria a Facebook vía n8n...');
+                      fetch('https://n8n.koratflow.agency/webhook/publish-now', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          id: job.id,
+                          publish_target: 'photo',
+                          image_url: imgPubData.publicUrl,
+                          copy_text: job.image_copy_text || job.copy_text || '¿Qué opinas sobre este proceso? #MrGreen #HuertoEnCasa',
+                          title: job.title,
+                          brand_id: job.brand_id || '06a68062-00c0-413d-b41f-b2229b9d52da'
+                        })
+                      }).then(async (pubRes) => {
+                        console.log('📡 Facebook Webhook Imagen respondio:', pubRes.status);
+                        await supabase.from('video_jobs').update({
+                          image_status: 'published',
+                          image_published_at: new Date().toISOString()
+                        }).eq('id', job.id);
+                      }).catch(err => {
+                        console.warn('[Auto-Publish Image] Aviso despachando imagen a Facebook:', err.message);
+                      });
+                    } catch (pubErr) {
+                      console.warn('[Auto-Publish Image] Error:', pubErr.message);
+                    }
+                  }).eq('id', job.id);
                     console.log('🎉 Imagen Satélite Nano Banana guardada en Supabase:', imgPubData.publicUrl);
                   }
                 }

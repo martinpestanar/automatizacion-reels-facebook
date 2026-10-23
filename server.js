@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { executeFlowRender } from './src/worker_flow.js';
 import { launchLoginSession } from './src/accounts/setup.js';
+import { checkAndRender } from './cron_autofill.js';
 
 const app = express();
 app.use(cors());
@@ -58,6 +59,11 @@ app.post('/api/flow/render', async (req, res) => {
   } finally {
     isRunning = false;
     currentProgress.isRunning = false;
+
+    // Disparar inmediatamente el siguiente en cola si quedan videos pendientes
+    setTimeout(() => {
+      checkAndRender().catch(err => console.warn('[Autofill Next] Error:', err.message));
+    }, 3000);
   }
 });
 
@@ -124,5 +130,7 @@ app.post('/api/accounts/login', async (req, res) => {
 
 const PORT = 3001;
 app.listen(PORT, () => {
+  checkAndRender().catch(() => {});
+  setInterval(() => { if (!isRunning) checkAndRender().catch(() => {}); }, 60000);
   console.log(`🚀 Flow Engine Local API escuchando en http://localhost:${PORT}`);
 });

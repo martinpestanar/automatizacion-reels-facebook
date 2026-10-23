@@ -34,37 +34,30 @@ async function checkAndRender() {
       return;
     }
 
-    const minBuffer = Number(config.min_queue_buffer) || 3;
-
-    // 2. Revisar cuántos videos listos para publicar existen en video_jobs
-    const { data: readyVideos, error: readyErr } = await supabase
+    // 2. Prioridad A: Renderizar TODOS los video_jobs que estén pendientes (sin final_video_url)
+    let { data: pendingJob } = await supabase
       .from('video_jobs')
-      .select('id')
-      .eq('status', 'ready_to_publish')
-      .not('final_video_url', 'is', null);
+      .select('id, title')
+      .is('final_video_url', null)
+      .in('status', ['ready_to_publish', 'needs_review', 'rendering'])
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-    if (readyErr) {
-      console.error('[Autofill] Error consultando ready_to_publish:', readyErr.message);
-      return;
-    }
-
-    const readyCount = readyVideos?.length || 0;
-    console.log(`[Autofill] Videos listos en cola: ${readyCount} (Mínimo requerido: ${minBuffer})`);
-
-    // Si hay menos del buffer configurado (ej: 3, 5, 7), alimentar la cola
-    if (readyCount < minBuffer) {
-      // Prioridad A: video_jobs existentes que aún no tienen final_video_url
-      let { data: pendingJob } = await supabase
+    // 3. Prioridad B: Si ya no hay ningún video_job pendiente de renderizar,
+    // comprobar si la cola lista tiene menos del buffer configurado y jalar del Vault
+    if (!pendingJob) {
+      const minBuffer = Number(config.min_queue_buffer) || 5;
+      const { data: readyVideos } = await supabase
         .from('video_jobs')
-        .select('id, title')
-        .is('final_video_url', null)
-        .in('status', ['ready_to_publish', 'needs_review', 'rendering'])
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .select('id')
+        .eq('status', 'ready_to_publish')
+        .not('final_video_url', 'is', null);
 
-      // Prioridad B: Si no hay video_jobs pendientes, tomar el siguiente de content_vault
-      if (!pendingJob) {
+      const readyCount = readyVideos?.length || 0;
+      console.log(`[Autofill] Todos los videos en cola procesados. Videos listos: ${readyCount}/${minBuffer}`);
+
+      if (readyCount < minBuffer) {
         const { data: vaultItem, error: vaultErr } = await supabase
           .from('content_vault')
           .select('*')
@@ -118,29 +111,33 @@ async function checkAndRender() {
           pendingJob = createdJob;
         }
       }
+    }
 
-      if (pendingJob) {
-        console.log(`[Autofill] Disparando render en Flow Engine para: ${pendingJob.id} - ${pendingJob.title}`);
-        try {
-          const res = await fetch('http://localhost:3001/api/flow/render', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jobId: pendingJob.id, mode: 'full' })
-          });
-          const resJson = await res.json();
-          console.log('[Autofill] Respuesta de API Flow:', resJson);
-        } catch (fetchErr) {
-          console.warn('[Autofill] No se pudo conectar a Flow API (posiblemente ocupado):', fetchErr.message);
-        }
-      } else {
-        console.log('[Autofill] No hay contenido pendiente ni en video_jobs ni en content_vault.');
+    if (pendingJob) {
+      console.log(`[Autofill] Disparando render en Flow Engine para: ${pendingJob.id} - ${pendingJob.title}`);
+      try {
+        const res = await fetch('http://localhost:3001/api/flow/render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId: pendingJob.id, mode: 'full' })
+        });
+        const resJson = await res.json();
+        console.log('[Autofill] Respuesta de API Flow:', resJson);
+      } catch (fetchErr) {
+        console.warn('[Autofill] No se pudo conectar a Flow API (posiblemente ocupado):', fetchErr.message);
       }
+    } else {
+      console.log('[Autofill] No hay contenido pendiente ni en video_jobs ni en content_vault.');
     }
   } catch (err) {
     console.error('[Autofill] Error inesperado:', err.message);
   }
 }
 
-// Ejecutar de inmediato y luego cada 5 minutos
-checkAndRender();
-setInterval(checkAndRender, 5 * 60 * 1000);
+export { checkAndRender };
+
+// Si se ejecuta directamente desde CLI:
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
+  checkAndRender();
+  setInterval(checkAndRender, 60 * 1000);
+}
