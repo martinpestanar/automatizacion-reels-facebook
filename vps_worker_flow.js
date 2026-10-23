@@ -262,7 +262,7 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
       await page.waitForTimeout(400);
 
       // 2.6 Duración (para modelos que lo soportan como Omni: 4s, 6s, 8s, 10s)
-      const durNum = settings.duration?.replace('s', '').trim() || '8';
+      const durNum = settings.duration?.replace('s', '').trim() || '6';
       const durToggle = page.locator(`mat-button-toggle:has-text("${durNum} s"), mat-button-toggle:has-text("${durNum}s")`).first();
       if (await durToggle.isVisible()) {
         console.log(`Configurando duración a ${durNum}s...`);
@@ -317,6 +317,9 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
         await page.waitForTimeout(400);
       }
 
+      // Registrar cantidad de tarjetas previas para no agarrar la escena anterior
+      const prevTilesCount = await page.locator('flow-video-tile, flow-grid-tile-container').count();
+
       const input = page.locator('.ProseMirror, [contenteditable="true"]').first();
       await input.waitFor({ state: 'visible', timeout: 20000 });
       await input.click({ force: true });
@@ -325,36 +328,45 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
       await page.keyboard.insertText(sc.prompt);
       await page.waitForTimeout(800);
 
-      const submitBtn = page.locator('button.generate-icon-button, button[aria-label*="generación" i], button[aria-label*="generate" i], button:has-text("arrow_forward")').first();
+      // Clic garantizado en el botón arrow_forward / generar
+      const submitBtn = page.locator('button:has(mat-icon:has-text("arrow_forward")), button.generate-icon-button, button[aria-label*="generación" i], button[aria-label*="generate" i], button:has-text("arrow_forward")').first();
       if (await submitBtn.isVisible() && !(await submitBtn.isDisabled())) {
-        await submitBtn.click();
+        await submitBtn.click({ force: true });
       } else {
         await page.keyboard.press('Enter');
       }
 
-      console.log(`⏳ Esperando generación de Escena ${sc.num} en Google Flow...`);
-      report(`scene_${sc.num}_generating`, basePct + 5, `Esperando generación de Escena ${sc.num}...`);
+      console.log(`⏳ Esperando que Google Flow inserte la nueva tarjeta de Escena ${sc.num}...`);
+      report(`scene_${sc.num}_generating`, basePct + 5, `Generando Escena ${sc.num} en Google Flow...`);
       
-      // Espera inicial breve para que Flow cree el tile en la galería
-      await page.waitForTimeout(6000);
+      // Esperar a que Flow cree la nueva tarjeta (el conteo debe subir o debe aparecer un nuevo tile con progreso)
+      let targetTile = page.locator('flow-video-tile, flow-grid-tile-container').first();
+      for (let waitCount = 0; waitCount < 15; waitCount++) {
+        const currentCount = await page.locator('flow-video-tile, flow-grid-tile-container').count();
+        if (currentCount > prevTilesCount) {
+          console.log(`🆕 Nueva tarjeta de Escena ${sc.num} detectada en la galería (Total: ${currentCount})`);
+          break;
+        }
+        await page.waitForTimeout(1000);
+      }
 
-      console.log(`⏳ Esperando a que el render de Escena ${sc.num} finalice en la galería...`);
-      report(`scene_${sc.num}_processing`, basePct + 5, `Generando video en Google Flow (esperando 100%)...`);
+      console.log(`⏳ Esperando que el render de Escena ${sc.num} alcance el 100%...`);
+      report(`scene_${sc.num}_processing`, basePct + 5, `Esperando 100% de Escena ${sc.num}...`);
 
-      // 1. Esperar en la galería a que la tarjeta termine de generar (desaparezca el spinner o aparezca play_circle / 100%)
-      const tile = page.locator('flow-video-tile, flow-grid-tile-container').first();
-      await tile.waitFor({ state: 'visible', timeout: 30000 });
-
+      // 1. Esperar a que la tarjeta más reciente termine de generar
       let tileReady = false;
-      for (let attempt = 0; attempt < 45; attempt++) {
-        // Verificar si la tarjeta ya tiene play_circle o ya no muestra progreso %
-        const text = await tile.innerText().catch(() => '');
+      for (let attempt = 0; attempt < 50; attempt++) {
+        targetTile = page.locator('flow-video-tile, flow-grid-tile-container').first();
+        const text = await targetTile.innerText().catch(() => '');
+        // Si ya tiene play_circle o ya terminó el porcentaje y tiene contenido
         if (text.includes('play_circle') || (!text.includes('%') && text.trim().length > 0)) {
           tileReady = true;
           break;
         }
-        await page.waitForTimeout(4000);
+        await page.waitForTimeout(3000);
       }
+      await page.waitForTimeout(2000);
+      const tile = targetTile;
 
       // Si aún no detectó play_circle, esperar un respiro prudencial
       await page.waitForTimeout(3000);
@@ -410,24 +422,36 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
         const prevClipPath = downloadedClips[downloadedClips.length - 1];
         const prevHash = crypto.createHash('md5').update(fs.readFileSync(prevClipPath)).digest('hex');
         if (currentHash === prevHash) {
-          console.warn(`⚠️ ALERTA: La Escena ${sc.num} es IDÉNTICA a la anterior (duplicado en Flow). Reintentando descarga del último tile...`);
-          // Cerrar modal actual
-          await page.keyboard.press('Escape');
-          await page.waitForTimeout(1000);
-          // Tomar el tile más reciente de nuevo
-          const freshTile = page.locator('flow-video-tile, flow-grid-tile-container').first();
-          await freshTile.click({ force: true });
-          await page.waitForTimeout(2000);
+          console.warn(`⚠️ ALERTA CRÍTICA: La Escena ${sc.num} generó un clip idéntico a la escena anterior (MD5: ${currentHash.slice(0, 8)}). Esperando nueva generación limpia en Flow...`);
+          // Cerrar visor
+          for (let k = 0; k < 3; k++) {
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(400);
+          }
+          // Esperar 15 segundos y reintentar esperar a que el tile nuevo aparezca y esté al 100%
+          await page.waitForTimeout(15000);
+          const latestTile = page.locator('flow-video-tile, flow-grid-tile-container').first();
+          await latestTile.click({ force: true });
+          await page.waitForTimeout(2500);
+
           const freshDl = page.locator('button[aria-label*="Descargar" i], button[aria-label*="Download" i]').first();
-          await freshDl.waitFor({ state: 'visible', timeout: 15000 });
+          await freshDl.waitFor({ state: 'visible', timeout: 25000 });
           await freshDl.click();
           await page.waitForTimeout(1000);
+
           const freshOpt = page.locator('.cdk-overlay-container button[role="menuitem"]:has-text("720p"), button[role="menuitem"]:has-text("720p")').first();
           const [retryDl] = await Promise.all([
             page.waitForEvent('download', { timeout: 35000 }),
             freshOpt.click()
           ]);
           await retryDl.saveAs(clipPath);
+
+          // Verificar si cambió
+          const retryHash = crypto.createHash('md5').update(fs.readFileSync(clipPath)).digest('hex');
+          if (retryHash === prevHash) {
+            console.error(`❌ Escena ${sc.num} no pudo desvincularse del clip previo. Abortando render para evitar video defectuoso.`);
+            throw new Error(`Escena ${sc.num} duplicó exactamente la escena anterior (hash idéntico)`);
+          }
         }
       }
 
