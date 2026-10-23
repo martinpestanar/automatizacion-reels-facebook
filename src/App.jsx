@@ -501,6 +501,17 @@ export default function App() {
   // Despachar 1 video individual desde el Banco hacia la Cola de Publicación
   async function handleSendVaultToQueue(item, renderMode = 'all') {
     try {
+      const { data: existingJobs } = await supabase.from('video_jobs').select('id, status, title').eq('title', item.title);
+      if (existingJobs && existingJobs.length > 0) {
+        if (existingJobs.some(j => j.status === 'published')) {
+          showToast('⚠️ \'' + item.title + '\' ya fue publicado anteriormente.');
+          return;
+        }
+        if (existingJobs.some(j => j.status === 'rendering' || j.status === 'ready_to_publish')) {
+          showToast('ℹ️ \'' + item.title + '\' ya está en proceso en la cola.');
+          return;
+        }
+      }
       showToast(renderMode === 'scene_1' ? '🎬 Enviando Escena 1 (Prueba de Gancho) a la cola...' : '✨ Enviando video de 3 escenas a la cola...');
       
       const { data: inserted, error: insertError } = await supabase.from('video_jobs').insert({
@@ -519,7 +530,21 @@ export default function App() {
         brand_id: item.brand_id || selectedBrand?.id,
         target_platforms: ['facebook'],
         final_video_url: null,
-        aspect_ratio: '9:16'
+        aspect_ratio: '9:16',
+        scheduled_for: (() => {
+          const hours = ['07:30', '11:30', '14:30', '18:00', '20:30'];
+          const now = new Date();
+          for (const h of hours) {
+            const [hh, mm] = h.split(':');
+            const target = new Date();
+            target.setHours(parseInt(hh), parseInt(mm), 0, 0);
+            if (target > now) return target.toISOString();
+          }
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          tomorrow.setHours(7, 30, 0, 0);
+          return tomorrow.toISOString();
+        })()
       }).select().single();
 
       if (insertError) throw insertError;
@@ -1102,63 +1127,56 @@ export default function App() {
 
           {/* Navigation Items */}
           <nav className="space-y-1 text-sm font-medium">
-            <button
-              onClick={() => setActiveTab('studio')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
-                activeTab === 'studio'
-                  ? 'bg-[var(--bg-surface)] text-[var(--accent)] border border-[var(--border-color)] shadow-xs font-semibold'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <Sparkles className="w-4 h-4" />
-              Studio Generator
-            </button>
-
+            {/* Pestaña Principal 1: Banco de Contenido */}
             <button
               onClick={() => setActiveTab('vault')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left font-bold ${
                 activeTab === 'vault'
-                  ? 'bg-[var(--bg-surface)] text-[var(--accent)] border border-[var(--border-color)] shadow-xs font-semibold'
+                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 shadow-xs'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
               }`}
             >
-              <Database className="w-4 h-4" />
-              Banco de Contenido
-              <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600">
-                Lotes
+              <Database className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              1. Banco de Contenido
+              <span className="ml-auto text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300">
+                {vaultItems.filter(v => v.status === 'stored').length} listos
               </span>
             </button>
 
+            {/* Pestaña Principal 2: Cola y Renders */}
+            <button
+              onClick={() => setActiveTab('queue')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left font-bold ${
+                activeTab === 'queue'
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 shadow-xs'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Video className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              2. Cola y Renders Flow
+              {videos.length > 0 && (
+                <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-black">
+                  {videos.length}
+                </span>
+              )}
+            </button>
+
+            <div className="pt-3 pb-1">
+              <span className="text-[10px] uppercase tracking-wider font-extrabold text-[var(--text-secondary)] px-3">
+                Configuración & Recursos
+              </span>
+            </div>
+
             <button
               onClick={() => setActiveTab('templates')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-left text-xs ${
                 activeTab === 'templates'
                   ? 'bg-[var(--bg-surface)] text-[var(--accent)] border border-[var(--border-color)] shadow-xs font-semibold'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
               }`}
             >
               <BookOpen className="w-4 h-4" />
-              Pilares & Prompts
-              <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600">
-                7
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('queue')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
-                activeTab === 'queue'
-                  ? 'bg-[var(--bg-surface)] text-[var(--accent)] border border-[var(--border-color)] shadow-xs font-semibold'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <Video className="w-4 h-4" />
-              Cola y Renders
-              {videos.length > 0 && (
-                <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-bold">
-                  {videos.length}
-                </span>
-              )}
+              Los 5 Pilares Botánicos
             </button>
 
             <button
@@ -1245,179 +1263,91 @@ export default function App() {
         {/* Top Header */}
         <header className="h-16 border-b border-[var(--border-color)] bg-[var(--bg-surface)] px-8 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-xs uppercase tracking-wider font-semibold text-[var(--text-secondary)]">
-              {activeTab === 'studio' && 'Manual Maestro: 3 Escenas x 6s (Total: 18s)'}
-              {activeTab === 'settings' && 'Parámetros Flow & Motor Omni (Configuración de Render)'}
-              {activeTab === 'vault' && 'Banco de Contenido: Importador Masivo de Lotes'}
-              {activeTab === 'templates' && 'Biblia de Producción: Los 5 Pilares Oficiales'}
-              {activeTab === 'queue' && 'Monitor de Contenido'}
-              {activeTab === 'accounts' && 'Pool de Créditos Google'}
-              {activeTab === 'channels' && 'Conectividad Multi-Canal'}
+            <span className="text-xs uppercase tracking-wider font-bold text-[var(--text-secondary)]">
+              {activeTab === 'vault' && '📦 Banco de Contenido & Lotes'}
+              {activeTab === 'queue' && '🎬 Monitor de Cola & Renders'}
+              {activeTab === 'studio' && '✨ Generador Manual'}
+              {activeTab === 'templates' && '🌱 Biblia Botánica (5 Pilares)'}
+              {activeTab === 'settings' && '⚙️ Parámetros de Render'}
+              {activeTab === 'accounts' && '🔑 Cuentas de Flow'}
+              {activeTab === 'channels' && '🌐 Conexiones Redes'}
             </span>
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={fetchData}
-              className="p-2 rounded-lg border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition cursor-pointer"
-              title="Refrescar datos"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-
-            {/* WIDGET DE AUTOMATIZACIÓN DIARIA (JARDINERÍA / MR. GREEN) */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border transition-all shadow-xs cursor-pointer ${
-              automationConfig.enabled
-                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300'
-                : 'bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-            onClick={() => setShowAutomationModal(true)}
-            title="Configurar y alternar piloto automático diario"
-            >
-              <div className="flex items-center gap-1.5">
-                <span className={`w-2.5 h-2.5 rounded-full ${automationConfig.enabled ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} />
-                <span className="text-xs font-black tracking-tight flex items-center gap-1">
-                  🌱 Auto-Piloto:
-                  <span className={automationConfig.enabled ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-stone-500 font-bold'}>
-                    {automationConfig.enabled ? 'ACTIVO' : 'PAUSADO'}
-                  </span>
-                </span>
-              </div>
-
-              <div className="h-4 w-px bg-[var(--border-color)]" />
-
-              <span className="text-[11px] font-bold">
-                {automationConfig.dailyQuantity}/día ({automationConfig.source === 'vault' ? 'Mi Banco' : 'Agente IA'})
-              </span>
-
-              <button
-                type="button"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  const next = !automationConfig.enabled;
-                  setAutomationConfig(prev => ({ ...prev, enabled: next }));
-                  showToast(next ? '🚀 Piloto Automático VPS ACTIVADO' : '⏸️ Piloto Automático VPS PAUSADO');
+            {/* 1. Selector de Frecuencia Diaria (5 o 7 videos al día) */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)]">
+              <span className="text-[11px] font-bold text-[var(--text-secondary)]">Ritmo:</span>
+              <select
+                value={automationConfig.dailyQuantity}
+                onChange={async (e) => {
+                  const qty = Number(e.target.value);
+                  setAutomationConfig(prev => ({ ...prev, dailyQuantity: qty }));
+                  showToast(`Frecuencia actualizada a ${qty} videos al día`);
                   try {
-                    const updatedConfig = { ...flowSettings, automation_enabled: next };
+                    const updatedConfig = { ...flowSettings, daily_target_videos: qty };
                     setFlowSettings(updatedConfig);
                     await supabase
                       .from('image_formats')
                       .update({ description: JSON.stringify(updatedConfig) })
                       .eq('code', 'flow_settings_config');
                   } catch (err) {
-                    console.error('Error toggling automation in Supabase:', err);
+                    console.error('Error updating daily quantity:', err);
                   }
                 }}
-                className={`p-1 rounded-lg transition hover:scale-105 cursor-pointer ${automationConfig.enabled ? 'text-emerald-600' : 'text-stone-400 hover:text-stone-600'}`}
-                title={automationConfig.enabled ? 'Hacer clic para pausar' : 'Hacer clic para encender'}
+                className="text-xs font-black bg-[var(--bg-surface)] text-emerald-600 dark:text-emerald-400 border border-[var(--border-color)] rounded-lg px-2 py-0.5 cursor-pointer"
               >
-                {automationConfig.enabled ? (
-                  <ToggleRight className="w-5 h-5 text-emerald-500" />
-                ) : (
-                  <ToggleLeft className="w-5 h-5 text-stone-400" />
-                )}
-              </button>
-            </div>
-
-            {/* Selector de Modo de Publicación: Manual (QA / Pruebas) vs Automático */}
-            <div className="flex items-center gap-1.5 bg-[var(--bg-subtle)] border border-[var(--border-color)] p-1 rounded-xl">
-              <span className="text-[10px] font-bold text-[var(--text-secondary)] pl-2">Salida:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setPublishingMode('manual');
-                  localStorage.setItem('publishingMode', 'manual');
-                  showToast('🛠️ Modo Manual Activo: Revisa el video antes de subirlo');
-                }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  publishingMode === 'manual'
-                    ? 'bg-amber-500 text-black shadow-xs font-extrabold'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-                title="Modo Manual: El video se renderiza y queda en espera de tu aprobación. No se sube nada solo."
-              >
-                <span>🛠️ Manual (Test)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPublishingMode('auto');
-                  localStorage.setItem('publishingMode', 'auto');
-                  showToast('⚡ Modo Automático Activo: Se publicará al terminar de renderizar');
-                }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  publishingMode === 'auto'
-                    ? 'bg-emerald-600 text-white shadow-xs font-extrabold'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-                title="Modo Automático: Cuando termine el render se dispara la subida a tu página automáticamente."
-              >
-                <span>⚡ Automático</span>
-              </button>
-            </div>
-
-            {/* Selector de Fuente: Banco de Contenido vs Agente IA */}
-            <div className="flex items-center gap-1.5 bg-[var(--bg-subtle)] border border-[var(--border-color)] p-1 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setGenerationSource('vault')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  generationSource === 'vault'
-                    ? 'bg-amber-500 text-black shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-                title="Toma los videos y prompts exactos que pegaste en tu Banco de Contenido (0 gasto de tokens)"
-              >
-                <span>📦 Mi Banco ({vaultItems.filter(v => v.status === 'stored').length})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setGenerationSource('n8n_ai')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  generationSource === 'n8n_ai'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-                title="Pide al Agente IA / Gemini de n8n que redacte guiones nuevos desde cero"
-              >
-                <span>🤖 Agente IA</span>
-              </button>
-            </div>
-
-            {/* Selector de Cantidad Automática */}
-            <div className="flex items-center gap-1.5 bg-[var(--bg-subtle)] border border-[var(--border-color)] p-1 rounded-xl">
-              <span className="text-[11px] font-bold text-[var(--text-secondary)] pl-2">Cantidad:</span>
-              <select
-                value={autoQuantity}
-                onChange={(e) => setAutoQuantity(Number(e.target.value))}
-                className="text-xs font-bold bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-color)] rounded-lg px-2 py-1 cursor-pointer"
-              >
-                <option value={1}>1 Video</option>
-                <option value={2}>2 Videos</option>
-                <option value={3}>3 Videos</option>
-                <option value={4}>4 Videos</option>
-                <option value={5}>5 Videos (Recomendado)</option>
-                <option value={7}>7 Videos (Semana)</option>
-                <option value={10}>10 Videos</option>
+                <option value={5}>5 Videos / día (Óptimo)</option>
+                <option value={7}>7 Videos / día (Escala)</option>
               </select>
             </div>
 
+            {/* 2. Switch Maestro Único: Auto-Publicación ON/OFF */}
             <button
-              onClick={handleGenerateDailyBatch}
-              disabled={isGenerating}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs shadow-md transition disabled:opacity-50 cursor-pointer ${
-                generationSource === 'vault'
-                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black'
-                  : 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white'
+              type="button"
+              onClick={async () => {
+                const next = !automationConfig.enabled;
+                setAutomationConfig(prev => ({ ...prev, enabled: next }));
+                showToast(next ? '🚀 Publicación Automática: ACTIVADA' : '⏸️ Publicación Automática: PAUSADA');
+                try {
+                  const updatedConfig = { ...flowSettings, automation_enabled: next };
+                  setFlowSettings(updatedConfig);
+                  await supabase
+                    .from('image_formats')
+                    .update({ description: JSON.stringify(updatedConfig), is_active: next })
+                    .eq('code', 'flow_settings_config');
+                } catch (err) {
+                  console.error('Error toggling automation:', err);
+                }
+              }}
+              className={`flex items-center gap-2.5 px-4 py-2 rounded-2xl border transition-all shadow-xs cursor-pointer ${
+                automationConfig.enabled
+                  ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
+              title="Alternar publicación automática en Facebook"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              {isGenerating 
-                ? 'Procesando...' 
-                : generationSource === 'vault'
-                  ? `⚡ Despachar ${autoQuantity} de mi Banco`
-                  : `⚡ Crear ${autoQuantity} con Agente IA`
-              }
+              <span className={`w-2.5 h-2.5 rounded-full ${automationConfig.enabled ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} />
+              <span className="text-xs font-black">
+                Auto-Publicación:
+                <span className={automationConfig.enabled ? 'text-emerald-600 dark:text-emerald-400 font-extrabold ml-1' : 'text-stone-500 font-bold ml-1'}>
+                  {automationConfig.enabled ? 'ACTIVO (A SUS HORAS)' : 'PAUSADO'}
+                </span>
+              </span>
+              {automationConfig.enabled ? (
+                <ToggleRight className="w-5 h-5 text-emerald-500" />
+              ) : (
+                <ToggleLeft className="w-5 h-5 text-stone-400" />
+              )}
+            </button>
+
+            {/* 3. Refrescar Datos */}
+            <button
+              onClick={fetchData}
+              className="p-2 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition cursor-pointer"
+              title="Refrescar datos de Supabase"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </header>
@@ -1963,6 +1893,29 @@ export default function App() {
 
                     {/* Botones de Selección y Despacho Masivo */}
                     <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          showToast('🤖 Solicitando al Agente IA lote de 15 guiones botánicos...');
+                          setIsGenerating(true);
+                          try {
+                            // Enviar petición al Agente IA / Generador oficial
+                            await handleGenerateDailyBatch();
+                            showToast('🎉 ¡15 guiones generados y guardados en tu Banco!');
+                          } catch (e) {
+                            showToast('Error generando con IA: ' + e.message);
+                          } finally {
+                            setIsGenerating(false);
+                          }
+                        }}
+                        disabled={isGenerating}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-bold cursor-pointer shadow-xs transition disabled:opacity-50"
+                        title="Pide al Agente IA generar 15 nuevos guiones botánicos con Nano Banana"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        {isGenerating ? 'Generando 15...' : '🤖 Generar 15 con Agente IA'}
+                      </button>
+
                       <button
                         type="button"
                         onClick={toggleSelectAllVault}
