@@ -2884,7 +2884,14 @@ export default function App() {
                         </div>
 
                         <div className="pt-2 border-t border-[var(--border-color)] flex items-center justify-between text-xs text-[var(--text-secondary)]">
-                          <span>{new Date(vid.created_at).toLocaleDateString()}</span>
+                          <div className="flex flex-col">
+                            <span className="font-bold text-[11px] text-[var(--text-primary)]">
+                              📅 {new Date(vid.created_at).toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                            </span>
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-bold">
+                              🕒 Render: {new Date(vid.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                          </div>
                           <div className="flex items-center gap-3">
                             <button
                               type="button"
