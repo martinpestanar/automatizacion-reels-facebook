@@ -341,13 +341,26 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
       
       // Esperar a que Flow cree la nueva tarjeta (el conteo debe subir o debe aparecer un nuevo tile con progreso)
       let targetTile = page.locator('flow-video-tile, flow-grid-tile-container').first();
-      for (let waitCount = 0; waitCount < 15; waitCount++) {
+      for (let waitCount = 0; waitCount < 20; waitCount++) {
         const currentCount = await page.locator('flow-video-tile, flow-grid-tile-container').count();
         if (currentCount > prevTilesCount) {
           console.log(`🆕 Nueva tarjeta de Escena ${sc.num} detectada en la galería (Total: ${currentCount})`);
           break;
         }
         await page.waitForTimeout(1000);
+      }
+
+      // Si no es la primera escena, asegurarnos de que la tarjeta superior no sea la completada previamente
+      if (downloadedClips.length > 0) {
+        console.log(`⏳ Verificando que la tarjeta superior comience el ciclo de renderizado de la Escena ${sc.num}...`);
+        for (let waitGen = 0; waitGen < 15; waitGen++) {
+          const topText = await page.locator('flow-video-tile, flow-grid-tile-container').first().innerText().catch(() => '');
+          if (topText.includes('%') || !topText.includes('play_circle')) {
+            console.log(`⚡ La tarjeta superior está renderizando activamente (${topText.replace(/\n/g, ' ')})...`);
+            break;
+          }
+          await page.waitForTimeout(1000);
+        }
       }
 
       console.log(`⏳ Esperando que el render de Escena ${sc.num} alcance el 100%...`);

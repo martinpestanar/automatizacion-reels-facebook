@@ -1,0 +1,884 @@
+{
+  "name": "Mr. Green - Publicación Automática Videos y Fotos Facebook",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "45 12,14,16,18,20 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger_schedule",
+      "name": "Trigger_Cron_Ventanas_Humanas",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [
+        -1744,
+        304
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "publish-now",
+        "options": {}
+      },
+      "id": "webhook_trigger_node",
+      "name": "Trigger_Webhook_Inmediato",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        -944,
+        0
+      ],
+      "webhookId": "mrgreen-publish-now-webhook",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "url": "https://hywlytsbogbassecflbw.supabase.co/rest/v1/video_jobs?status=eq.ready_to_publish&order=created_at.asc&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5d2x5dHNib2diYXNzZWNmbGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzODI2ODMsImV4cCI6MjA4OTk1ODY4M30.1FB0-PMfuTBJ9oJWRJMkKA3vQKkIS1LrNFXEvtmHpWY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5d2x5dHNib2diYXNzZWNmbGJ3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDM4MjY4MywiZXhwIjoyMDg5OTU4NjgzfQ.3xar2lr0GSK3TjKVPG-kyuN2_0uougk2EHsv52-lzc4"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "supabase_get_videos",
+      "name": "Consultar_Videos_Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -1504,
+        304
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond_has_video_url",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              },
+              "leftValue": "={{ $json.final_video_url }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if_has_videos",
+      "name": "Hay_Videos",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -1248,
+        304
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Genera un retraso aleatorio entre 4 y 22 minutos para simular comportamiento humano\nconst randomMinutes = Math.floor(Math.random() * (22 - 4 + 1)) + 4;\nreturn {\n  json: {\n    ...$input.first().json,\n    delay_minutes: randomMinutes\n  }\n};"
+      },
+      "id": "jitter_node",
+      "name": "Calculo_Jitter_Humano",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -1008,
+        272
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delay_minutes }}",
+        "unit": "minutes"
+      },
+      "id": "wait_human_node",
+      "name": "Wait_Humano_Variable",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        -784,
+        272
+      ],
+      "webhookId": "e1b15b89-7d2e-41a9-b2e7-9acbc0b7ccd7",
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "me",
+        "edge": "videos",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "file_url",
+                "value": "={{ $json.body?.final_video_url || $json.final_video_url }}"
+              },
+              {
+                "name": "description",
+                "value": "={{ $json.body?.copy_text || $json.copy_text }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "facebook_publish_video",
+      "name": "Facebook_Publicar_Video",
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "maxTries": 3,
+      "position": [
+        -544,
+        272
+      ],
+      "retryOnFail": true,
+      "typeVersion": 1,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "BU6fN8TXw3ORWYT1",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://hywlytsbogbassecflbw.supabase.co/rest/v1/video_jobs?id=eq.{{ $(\"Trigger_Webhook_Inmediato\").item?.json?.id || $(\"Trigger_Webhook_Inmediato\").item?.json?.body?.id || $(\"Consultar_Videos_Supabase\").item?.json?.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5d2x5dHNib2diYXNzZWNmbGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzODI2ODMsImV4cCI6MjA4OTk1ODY4M30.1FB0-PMfuTBJ9oJWRJMkKA3vQKkIS1LrNFXEvtmHpWY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5d2x5dHNib2diYXNzZWNmbGJ3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDM4MjY4MywiZXhwIjoyMDg5OTU4NjgzfQ.3xar2lr0GSK3TjKVPG-kyuN2_0uougk2EHsv52-lzc4"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"published\",\n  \"published_at\": \"{{ $now.toISO() }}\",\n  \"facebook_post_id\": \"{{ $json.video_id || $json.id || $json.post_id || '' }}\"\n}",
+        "options": {}
+      },
+      "id": "update_supabase_status",
+      "name": "Actualizar_Supabase_Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -304,
+        272
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.floor(Math.random() * (44 - 28 + 1)) + 28 }}",
+        "unit": "minutes"
+      },
+      "id": "wait_30_min",
+      "name": "Wait_Aleatorio_30_45_Min",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        -80,
+        272
+      ],
+      "webhookId": "580f90ae-adfb-4952-91f4-60eb188903e1",
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "me",
+        "edge": "photos",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "url",
+                "value": "={{ $json.body?.image_url || $json.image_url || $('Consultar_Videos_Supabase').item?.json?.image_url }}"
+              },
+              {
+                "name": "message",
+                "value": "={{ $json.body?.copy_text || $json.copy_text || $json.body?.copy || $json.copy || $('Consultar_Videos_Supabase').item?.json?.image_copy_text || '¿Qué opinas sobre este proceso botánico? #MrGreen #HuertoEnCasa' }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "facebook_publish_image",
+      "name": "Facebook_Publicar_Imagen",
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "position": [
+        1184,
+        272
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "BU6fN8TXw3ORWYT1",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://hywlytsbogbassecflbw.supabase.co/rest/v1/video_jobs?id=eq.{{ $(\"Trigger_Webhook_Inmediato\").item?.json?.id || $(\"Trigger_Webhook_Inmediato\").item?.json?.body?.id || $(\"Consultar_Videos_Supabase\").item?.json?.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5d2x5dHNib2diYXNzZWNmbGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzODI2ODMsImV4cCI6MjA4OTk1ODY4M30.1FB0-PMfuTBJ9oJWRJMkKA3vQKkIS1LrNFXEvtmHpWY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5d2x5dHNib2diYXNzZWNmbGJ3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDM4MjY4MywiZXhwIjoyMDg5OTU4NjgzfQ.3xar2lr0GSK3TjKVPG-kyuN2_0uougk2EHsv52-lzc4"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"image_status\": \"published\",\n  \"image_published_at\": \"{{ $now.toISO() }}\",\n  \"image_facebook_post_id\": \"{{ $json.id || $json.post_id || '' }}\"\n}",
+        "options": {}
+      },
+      "id": "update_supabase_image_status",
+      "name": "Actualizar_Supabase_Imagen",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1408,
+        272
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond_has_flow_image",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              },
+              "leftValue": "={{ $('Consultar_Videos_Supabase').item?.json?.image_url || $('Facebook_Publicar_Video').item?.json?.image_url || '' }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check_has_image_prompt",
+      "name": "Tiene_Imagen_Flow",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        144,
+        272
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond_story",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.body?.publish_target || $json.publish_target }}",
+              "rightValue": "story"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if_is_story_node",
+      "name": "Es_Historia_Independiente",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -720,
+        0
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "me",
+        "edge": "video_stories",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "upload_phase",
+                "value": "start"
+              },
+              {
+                "name": "file_url",
+                "value": "={{ $json.body?.final_video_url || $json.final_video_url }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "facebook_publish_story",
+      "name": "Facebook_Publicar_Historia",
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "maxTries": 3,
+      "position": [
+        -544,
+        -128
+      ],
+      "retryOnFail": true,
+      "typeVersion": 1,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "BU6fN8TXw3ORWYT1",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "me",
+        "edge": "video_stories",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "upload_phase",
+                "value": "start"
+              },
+              {
+                "name": "file_url",
+                "value": "={{ $('Trigger_Webhook_Inmediato').item?.json?.final_video_url || $('Trigger_Webhook_Inmediato').item?.json?.body?.final_video_url || $('Consultar_Videos_Supabase').item?.json?.final_video_url || $json.body?.final_video_url || $json.final_video_url }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "auto_publish_story",
+      "name": "Auto_Publicar_Historia_45Min",
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "maxTries": 3,
+      "position": [
+        128,
+        448
+      ],
+      "retryOnFail": true,
+      "typeVersion": 1,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "BU6fN8TXw3ORWYT1",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond_photo",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.body?.publish_target || $json.publish_target }}",
+              "rightValue": "photo"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if_is_photo_node",
+      "name": "Es_Foto_Independiente",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -480,
+        50
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://hywlytsbogbassecflbw.supabase.co/rest/v1/video_jobs?id=eq.{{ $('Trigger_Webhook_Inmediato').item?.json?.id || $('Trigger_Webhook_Inmediato').item?.json?.body?.id || $('Consultar_Videos_Supabase').item?.json?.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5d2x5dHNib2diYXNzZWNmbGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzODI2ODMsImV4cCI6MjA4OTk1ODY4M30.1FB0-PMfuTBJ9oJWRJMkKA3vQKkIS1LrNFXEvtmHpWY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5d2x5dHNib2diYXNzZWNmbGJ3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDM4MjY4MywiZXhwIjoyMDg5OTU4NjgzfQ.3xar2lr0GSK3TjKVPG-kyuN2_0uougk2EHsv52-lzc4"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"published\",\n  \"published_at\": \"{{ $now.toISO() }}\",\n  \"facebook_post_id\": \"{{ $json.video_id || $json.id || '' }}\"\n}",
+        "options": {}
+      },
+      "id": "update_supabase_story_status",
+      "name": "Actualizar_Supabase_Historia",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -20,
+        -128
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.upload_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "file_url",
+              "value": "={{ $('Trigger_Webhook_Inmediato').item?.json?.final_video_url || $('Trigger_Webhook_Inmediato').item?.json?.body?.final_video_url || $('Consultar_Videos_Supabase').item?.json?.final_video_url || $json.body?.final_video_url || $json.final_video_url }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "facebook_upload_transfer_story",
+      "name": "Facebook_Transferir_Video_Historia",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -380,
+        -128
+      ],
+      "typeVersion": 4.2,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "BU6fN8TXw3ORWYT1",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "me",
+        "edge": "video_stories",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "upload_phase",
+                "value": "finish"
+              },
+              {
+                "name": "video_id",
+                "value": "={{ $('Facebook_Publicar_Historia').item?.json?.video_id }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "facebook_finish_story",
+      "name": "Facebook_Finalizar_Publicacion_Historia",
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "position": [
+        -200,
+        -128
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "BU6fN8TXw3ORWYT1",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.upload_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "file_url",
+              "value": "={{ $('Consultar_Videos_Supabase').item?.json?.final_video_url || $('Facebook_Publicar_Video').item?.json?.final_video_url || $('Trigger_Webhook_Inmediato').item?.json?.final_video_url || $json.body?.final_video_url || $json.final_video_url }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "auto_transfer_story",
+      "name": "Auto_Transferir_Historia_45Min",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        320,
+        448
+      ],
+      "typeVersion": 4.2,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "BU6fN8TXw3ORWYT1",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "me",
+        "edge": "video_stories",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "upload_phase",
+                "value": "finish"
+              },
+              {
+                "name": "video_id",
+                "value": "={{ $('Auto_Publicar_Historia_45Min').item?.json?.video_id }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "auto_finish_story",
+      "name": "Auto_Finalizar_Historia_45Min",
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "position": [
+        520,
+        448
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "BU6fN8TXw3ORWYT1",
+          "name": "Facebook Graph account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Actualizar_Supabase_Video": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Wait_Aleatorio_30_45_Min",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Calculo_Jitter_Humano": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Wait_Humano_Variable",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Consultar_Videos_Supabase": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Hay_Videos",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Facebook_Publicar_Imagen": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Actualizar_Supabase_Imagen",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Facebook_Publicar_Video": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Actualizar_Supabase_Video",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Hay_Videos": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Calculo_Jitter_Humano",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Trigger_Cron_Ventanas_Humanas": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Consultar_Videos_Supabase",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Wait_Humano_Variable": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Facebook_Publicar_Video",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Wait_Aleatorio_30_45_Min": {
+      "main": [
+        [
+          {
+            "node": "Tiene_Imagen_Flow",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Auto_Publicar_Historia_45Min",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger_Webhook_Inmediato": {
+      "main": [
+        [
+          {
+            "node": "Es_Historia_Independiente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Es_Historia_Independiente": {
+      "main": [
+        [
+          {
+            "node": "Facebook_Publicar_Historia",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Es_Foto_Independiente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook_Publicar_Historia": {
+      "main": [
+        [
+          {
+            "node": "Facebook_Transferir_Video_Historia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tiene_Imagen_Flow": {
+      "main": [
+        [
+          {
+            "node": "Facebook_Publicar_Imagen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Es_Foto_Independiente": {
+      "main": [
+        [
+          {
+            "node": "Facebook_Publicar_Imagen",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Facebook_Publicar_Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook_Transferir_Video_Historia": {
+      "main": [
+        [
+          {
+            "node": "Facebook_Finalizar_Publicacion_Historia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook_Finalizar_Publicacion_Historia": {
+      "main": [
+        [
+          {
+            "node": "Actualizar_Supabase_Historia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto_Publicar_Historia_45Min": {
+      "main": [
+        [
+          {
+            "node": "Auto_Transferir_Historia_45Min",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto_Transferir_Historia_45Min": {
+      "main": [
+        [
+          {
+            "node": "Auto_Finalizar_Historia_45Min",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto_Finalizar_Historia_45Min": {
+      "main": [
+        [
+          {
+            "node": "Actualizar_Supabase_Historia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}
