@@ -1,0 +1,10 @@
+node_modules
+profiles
+temp_renders
+output
+.env
+.env.local
+*.log
+*.mp4
+*.png
+dashboard/.git
