@@ -641,14 +641,12 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
                     } catch (pubErr) {
                       console.warn('[Auto-Publish Image] Error:', pubErr.message);
                     }
-                  }).eq('id', job.id);
                     console.log('🎉 Imagen Satélite Nano Banana guardada en Supabase:', imgPubData.publicUrl);
                   }
                 }
               }
             }
           }
-        }
       } catch (imgErr) {
         console.warn('Aviso en generación de imagen Nano Banana (continuando):', imgErr.message);
       }
