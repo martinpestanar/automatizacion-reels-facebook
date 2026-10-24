@@ -131,6 +131,14 @@ app.post('/api/accounts/login', async (req, res) => {
 const PORT = 3001;
 app.listen(PORT, () => {
   checkAndRender().catch(() => {});
-  setInterval(() => { if (!isRunning) checkAndRender().catch(() => {}); }, 60000);
+  setInterval(async () => {
+    if (!isRunning) {
+      try {
+        await checkAndRender();
+      } catch (e) {
+        console.error('[Autofill Cron]', e.message);
+      }
+    }
+  }, 15000);
   console.log(`🚀 Flow Engine Local API escuchando en http://localhost:${PORT}`);
 });
