@@ -2810,22 +2810,28 @@ export default function App() {
                                 <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border backdrop-blur-sm ${
                                   vid.status === 'error' || vid.error_message
                                     ? 'bg-red-950/70 border-red-500/40 text-red-300'
-                                    : renderingJobs[vid.id] || vid.status === 'rendering'
-                                      ? 'bg-amber-950/70 border-amber-500/40 text-amber-300'
-                                      : 'bg-black/60 border-emerald-500/20 text-emerald-400'
+                                    : renderingJobs[vid.id]
+                                      ? 'bg-amber-950/70 border-amber-500/40 text-amber-300 ring-1 ring-amber-400/50'
+                                      : vid.status === 'rendering'
+                                        ? 'bg-sky-950/70 border-sky-500/40 text-sky-300'
+                                        : 'bg-black/60 border-emerald-500/20 text-emerald-400'
                                 }`}>
                                   <span className={`w-2 h-2 rounded-full ${
                                     vid.status === 'error' || vid.error_message
                                       ? 'bg-red-400'
-                                      : renderingJobs[vid.id] || vid.status === 'rendering'
+                                      : renderingJobs[vid.id]
                                         ? 'bg-amber-400 animate-ping'
-                                        : 'bg-emerald-400 animate-pulse'
+                                        : vid.status === 'rendering'
+                                          ? 'bg-sky-400'
+                                          : 'bg-emerald-400 animate-pulse'
                                   }`}></span>
                                   {vid.status === 'error' || vid.error_message
                                     ? 'Error en Render'
-                                    : renderingJobs[vid.id] || vid.status === 'rendering'
+                                    : renderingJobs[vid.id]
                                       ? 'Renderizando en Flow...'
-                                      : 'Listo p/ Flow'}
+                                      : vid.status === 'rendering'
+                                        ? 'En Cola de Espera'
+                                        : 'Listo p/ Flow'}
                                 </span>
                                 <span className="bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] text-stone-300 uppercase">
                                   {currentView === 'full' ? '3 escenas (18s)' : `Escena ${currentView.toUpperCase()}`}
@@ -2850,15 +2856,15 @@ export default function App() {
                                     <RefreshCw className="w-3 h-3" /> Reintentar Render
                                   </button>
                                 </div>
-                              ) : renderingJobs[vid.id] || vid.status === 'rendering' ? (
-                                /* Caso 2: Barra de progreso y temporizador si está renderizando */
+                              ) : renderingJobs[vid.id] ? (
+                                /* Caso 2A: Render Activo en Google Flow (Barra y Temporizador Real) */
                                 <div className="my-auto w-full px-3 z-10 space-y-3 text-center">
                                   <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 animate-pulse">
                                     <Clock className="w-6 h-6" />
                                   </div>
                                   <div>
                                     <div className="flex justify-between items-center text-[11px] font-bold text-stone-200 mb-1">
-                                      <span>Progreso de Render</span>
+                                      <span>Progreso de Render en Flow</span>
                                       <span className="font-mono text-amber-400">
                                         {renderingJobs[vid.id]?.pct || 15}%
                                       </span>
@@ -2878,6 +2884,17 @@ export default function App() {
                                   </div>
                                   <p className="text-[10px] text-stone-300 italic bg-black/40 px-2 py-1 rounded border border-white/5">
                                     {renderingJobs[vid.id]?.message || 'Procesando en Google Flow...'}
+                                  </p>
+                                </div>
+                              ) : vid.status === 'rendering' ? (
+                                /* Caso 2B: En Cola de Espera del Renderizador */
+                                <div className="my-auto w-full px-3 z-10 space-y-3 text-center">
+                                  <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center mx-auto text-sky-400">
+                                    <Clock className="w-6 h-6 animate-spin" />
+                                  </div>
+                                  <p className="text-xs font-bold text-sky-300">En Cola de Procesamiento</p>
+                                  <p className="text-[10px] text-stone-400 bg-black/50 px-3 py-1.5 rounded-lg border border-white/5">
+                                    Esperando su turno en Google Flow. El motor local lo tomará automáticamente al terminar el render en curso.
                                   </p>
                                 </div>
                               ) : (
