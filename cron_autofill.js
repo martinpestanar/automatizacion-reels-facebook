@@ -58,41 +58,46 @@ async function checkAndRender() {
       console.log(`[Autofill] Todos los videos en cola procesados. Videos listos: ${readyCount}/${minBuffer}`);
 
       if (readyCount < minBuffer) {
-        const { data: vaultItem, error: vaultErr } = await supabase
+        // Consultar títulos ya existentes en video_jobs para no insertar duplicados
+        const { data: existingJobs } = await supabase.from('video_jobs').select('title');
+        const existingTitles = new Set((existingJobs || []).map(j => (j.title || '').trim().toLowerCase()));
+
+        const { data: vaultItems, error: vaultErr } = await supabase
           .from('content_vault')
           .select('*')
           .eq('status', 'stored')
           .neq('title', 'El Error de la Cáscara de Huevo')
           .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
+          .limit(10);
 
         if (vaultErr) {
           console.error('[Autofill] Error consultando content_vault:', vaultErr.message);
           return;
         }
 
-        if (vaultItem) {
-          console.log(`[Autofill] Promoviendo idea del Vault a video_jobs: "${vaultItem.title}"`);
+        const candidate = (vaultItems || []).find(v => !existingTitles.has((v.title || '').trim().toLowerCase()));
+
+        if (candidate) {
+          console.log(`[Autofill] Promoviendo idea del Vault a video_jobs: "${candidate.title}"`);
           const { data: createdJob, error: createErr } = await supabase
             .from('video_jobs')
             .insert({
-              title: vaultItem.title,
-              topic: vaultItem.pilar || vaultItem.title,
-              pilar: vaultItem.pilar,
-              angulo: vaultItem.angulo,
-              clima_luz: vaultItem.clima_luz,
-              copy_text: vaultItem.copy_text,
-              hashtags: vaultItem.hashtags || [],
-              scene_1_prompt: vaultItem.scene_1_prompt,
-              scene_2_prompt: vaultItem.scene_2_prompt,
-              scene_3_prompt: vaultItem.scene_3_prompt,
-              image_prompt: vaultItem.image_prompt,
-              image_copy_text: vaultItem.image_copy_text,
+              title: candidate.title,
+              topic: candidate.pilar || candidate.title,
+              pilar: candidate.pilar,
+              angulo: candidate.angulo,
+              clima_luz: candidate.clima_luz,
+              copy_text: candidate.copy_text,
+              hashtags: candidate.hashtags || [],
+              scene_1_prompt: candidate.scene_1_prompt,
+              scene_2_prompt: candidate.scene_2_prompt,
+              scene_3_prompt: candidate.scene_3_prompt,
+              image_prompt: candidate.image_prompt,
+              image_copy_text: candidate.image_copy_text,
               status: 'ready_to_publish',
               aspect_ratio: '9:16',
               target_platforms: ['facebook'],
-              brand_id: vaultItem.brand_id || '06a68062-00c0-413d-b41f-b2229b9d52da'
+              brand_id: candidate.brand_id || '06a68062-00c0-413d-b41f-b2229b9d52da'
             })
             .select()
             .single();
@@ -102,11 +107,11 @@ async function checkAndRender() {
             return;
           }
 
-          // Marcar el item del vault como 'promoted'
+          // Marcar el item del vault como 'in_queue'
           await supabase
             .from('content_vault')
-            .update({ status: 'promoted' })
-            .eq('id', vaultItem.id);
+            .update({ status: 'in_queue' })
+            .eq('id', candidate.id);
 
           pendingJob = createdJob;
         }
