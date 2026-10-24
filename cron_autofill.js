@@ -34,12 +34,13 @@ async function checkAndRender() {
       return;
     }
 
-    // 2. Prioridad A: Renderizar TODOS los video_jobs que estén pendientes (sin final_video_url)
+    // 2. Prioridad A: Renderizar video_jobs pendientes (sin final_video_url)
+    // IMPORTANTE: Excluir 'rendering' — si ya está en proceso, el server.js lo controla con isRunning=true
     let { data: pendingJob } = await supabase
       .from('video_jobs')
-      .select('id, title')
+      .select('id, title, status')
       .is('final_video_url', null)
-      .in('status', ['ready_to_publish', 'needs_review', 'rendering'])
+      .in('status', ['ready_to_publish', 'needs_review'])
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();
