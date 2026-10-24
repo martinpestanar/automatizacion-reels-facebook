@@ -1044,6 +1044,16 @@ export default function App() {
         ? '📱 Publicando Historia independiente en Facebook (Monetizable)...' 
         : '🚀 Publicando Reel en la página de Facebook...');
 
+      // BLOQUEO INMEDIATO: Registrar como publicado en Supabase ANTES de disparar el webhook para blindar contra resubidas
+      const publishedTimestamp = new Date().toISOString();
+      await supabase.from('video_jobs').update({
+        status: 'published',
+        published_at: publishedTimestamp
+      }).eq('id', vid.id);
+
+      // Actualizar estado local de inmediato en la UI
+      setVideos(prev => prev.map(v => v.id === vid.id ? { ...v, status: 'published', published_at: publishedTimestamp } : v));
+
       // Disparar Webhook oficial de n8n con destino: 'reel' o 'story_independent'
       const resp = await fetch('https://n8n.koratflow.agency/webhook/publish-now', {
         method: 'POST',
@@ -1063,23 +1073,12 @@ export default function App() {
         })
       });
 
-      // Actualizar estado en Supabase a 'published'
-      await supabase.from('video_jobs').update({
-        status: 'published',
-        published_at: new Date().toISOString()
-      }).eq('id', vid.id);
-
       showToast(targetType === 'story' 
         ? '🎉 ¡Historia independiente publicada en tu Facebook!' 
         : '🎉 ¡Reel publicado exitosamente en tu página!');
       fetchData();
     } catch (err) {
       console.error('Error publicando video:', err);
-      // Aún así dejamos constancia si fue publicado o error de red
-      await supabase.from('video_jobs').update({
-        status: 'published',
-        published_at: new Date().toISOString()
-      }).eq('id', vid.id);
       showToast('✅ Señal de publicación enviada a tu página');
       fetchData();
     } finally {
