@@ -433,6 +433,17 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
   return clipPath;
 }
 
+// ─── Auto-limpieza de archivos temporales locales tras render exitoso ─────────
+function cleanupTempFiles(filePaths) {
+  for (const fp of filePaths) {
+    if (fp && fs.existsSync(fp)) {
+      fs.unlink(fp, (err) => {
+        if (!err) console.log(`🧹 [Limpieza] Borrado temporal: ${path.basename(fp)}`);
+      });
+    }
+  }
+}
+
 // ─── Función principal de render ──────────────────────────────────────────────
 export async function executeFlowRender(jobId = null, mode = 'full_video_3_scenes', onProgress = null) {
   const report = (stage, pct, message) => {
@@ -561,6 +572,16 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
             console.warn(`Aviso al subir checkpoint Escena ${sc.num}:`, uploadErr.message);
           }
 
+          // Descontar créditos parciales por escena completada (12 créditos c/u)
+          if (selectedAccount) {
+            try {
+              await recordAccountUsage(selectedAccount.id, 12);
+              console.log(`📊 12 créditos descontados a ${selectedAccount.alias} por Escena ${sc.num}.`);
+            } catch (creditErr) {
+              console.warn(`Aviso descontando créditos por escena:`, creditErr.message);
+            }
+          }
+
           sceneIndex++;
 
         } catch (sceneErr) {
@@ -641,6 +662,9 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
       const { data: pubData } = supabase.storage.from('mrgreen-videos').getPublicUrl(uploadName);
       finalVideoUrl = pubData.publicUrl;
       console.log('🎉 Video Final subido a Supabase:', finalVideoUrl);
+
+      // 🧹 Limpiar clips individuales del disco (ya están en Supabase Storage)
+      cleanupTempFiles([...downloadedClips, stitchedPath]);
     }
 
     if (finalVideoUrl) {
@@ -761,21 +785,32 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
 
     report('done', 100, '¡Video e Imagen completados!');
 
-    // Descontar créditos a la cuenta utilizada
-    if (selectedAccount) {
-      const creditsCost = mode === 'single_scene_1' ? 12 : 36;
-      await recordAccountUsage(selectedAccount.id, creditsCost);
-      console.log(`📊 +${creditsCost} créditos descontados a ${selectedAccount.alias}.`);
-    }
+    // Los créditos ya se descontaron por escena durante el render (12 c/u)
+    // No se descuentan de nuevo aquí para evitar doble conteo
 
   } catch (err) {
     console.error('❌ Error durante render en Google Flow:', err);
     report('error', 0, err.message || 'Error en Google Flow');
 
+    // Incrementar retry_count. Si llega a 3, marcar error definitivo para no volver a intentar
+    const { data: currentJob } = await supabase.from('video_jobs')
+      .select('retry_count').eq('id', job.id).single().catch(() => ({ data: null }));
+    const retryCount = ((currentJob?.retry_count) || 0) + 1;
+    const isDefinitive = retryCount >= 3;
+
     await supabase.from('video_jobs').update({
-      status: 'error',
-      error_message: err.message || 'Error inesperado durante el render'
+      status: isDefinitive ? 'error' : 'ready_to_publish',
+      error_message: isDefinitive
+        ? `[DEFINITIVO tras ${retryCount} intentos] ${err.message || 'Error inesperado'}`
+        : err.message || 'Error inesperado durante el render',
+      retry_count: retryCount
     }).eq('id', job.id);
+
+    if (isDefinitive) {
+      console.error(`🚫 Job "${job.title}" marcado como error DEFINITIVO tras ${retryCount} intentos.`);
+    } else {
+      console.warn(`⚠️ Job "${job.title}" reintentará (intento ${retryCount}/3).`);
+    }
 
     throw err;
   } finally {

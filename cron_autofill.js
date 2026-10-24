@@ -20,22 +20,103 @@ async function getConfig() {
   return {
     automation_enabled: true,
     daily_target_videos: 5,
-    min_queue_buffer: 3
+    min_queue_buffer: 3,
+    publish_to_stories: true
   };
 }
 
-async function checkAndRender() {
+// ─── AUTO-PUBLICACIÓN: Dispara el webhook de n8n para un video ───────────────
+async function autoPublishVideo(job, config) {
+  try {
+    // Bloquear ANTES de disparar webhook para evitar doble publicación
+    await supabase.from('video_jobs').update({
+      status: 'published',
+      published_at: new Date().toISOString()
+    }).eq('id', job.id).eq('status', 'ready_to_publish'); // condición extra de seguridad
+
+    console.log(`📤 [AutoPublish] Disparando n8n webhook para: "${job.title}"`);
+
+    const payload = {
+      id: job.id,
+      publish_target: 'reel',
+      final_video_url: job.final_video_url,
+      copy_text: job.copy_text || '',
+      title: job.title,
+      brand_id: job.brand_id || '06a68062-00c0-413d-b41f-b2229b9d52da',
+      image_url: job.image_url || null,
+      image_copy_text: job.image_copy_text || null
+    };
+
+    const res = await fetch('https://n8n.koratflow.agency/webhook/publish-now', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    console.log(`✅ [AutoPublish] Webhook respondió: ${res.status} para "${job.title}"`);
+    return true;
+  } catch (err) {
+    console.error(`❌ [AutoPublish] Error publicando "${job.title}":`, err.message);
+    // Revertir el lock si el webhook falló
+    await supabase.from('video_jobs').update({
+      status: 'ready_to_publish',
+      published_at: null
+    }).eq('id', job.id);
+    return false;
+  }
+}
+
+// ─── LÓGICA PRINCIPAL ────────────────────────────────────────────────────────
+export async function checkAndRender() {
   try {
     const config = await getConfig();
 
-    // 1. Interruptor Maestro (Kill-Switch)
+    // 1. Kill-Switch global
     if (config.automation_enabled === false) {
-      console.log('[Autofill] ⏸️ Automatización en PAUSA por configuración de administrador.');
+      console.log('[Autofill] ⏸️ Automatización en PAUSA por configuración.');
       return;
     }
 
-    // 2. Prioridad A: Renderizar video_jobs pendientes (sin final_video_url)
-    // IMPORTANTE: Excluir 'rendering' — si ya está en proceso, el server.js lo controla con isRunning=true
+    // ── BLOQUE A: Auto-publicación de hasta 5 videos por día ──────────────────
+    const dailyTarget = Number(config.daily_target_videos) || 5;
+
+    // Calcular inicio del día actual (medianoche local → UTC)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const { data: publishedToday } = await supabase
+      .from('video_jobs')
+      .select('id')
+      .eq('status', 'published')
+      .gte('published_at', todayStart.toISOString());
+
+    const publishedCount = (publishedToday || []).length;
+
+    if (publishedCount < dailyTarget) {
+      const remaining = dailyTarget - publishedCount;
+      console.log(`[AutoPublish] Publicados hoy: ${publishedCount}/${dailyTarget}. Buscando ${remaining} video(s) para publicar...`);
+
+      // Buscar videos listos (con video final) ordenados por más antiguos primero
+      const { data: readyVideos } = await supabase
+        .from('video_jobs')
+        .select('id, title, final_video_url, copy_text, image_url, image_copy_text, brand_id')
+        .eq('status', 'ready_to_publish')
+        .not('final_video_url', 'is', null)
+        .order('created_at', { ascending: true })
+        .limit(remaining);
+
+      for (const video of (readyVideos || [])) {
+        console.log(`[AutoPublish] → Publicando automáticamente: "${video.title}"`);
+        await autoPublishVideo(video, config);
+        // Pequeña pausa entre publicaciones para no saturar n8n
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    } else {
+      console.log(`[AutoPublish] Meta diaria cumplida: ${publishedCount}/${dailyTarget} videos publicados hoy. ✅`);
+    }
+
+    // ── BLOQUE B: Renderizar videos pendientes ─────────────────────────────────
+    // IMPORTANTE: NO incluir 'rendering' — si ya está procesando, isRunning lo bloquea
     let { data: pendingJob } = await supabase
       .from('video_jobs')
       .select('id, title, status')
@@ -45,21 +126,21 @@ async function checkAndRender() {
       .limit(1)
       .maybeSingle();
 
-    // 3. Prioridad B: Si ya no hay ningún video_job pendiente de renderizar,
-    // comprobar si la cola lista tiene menos del buffer configurado y jalar del Vault
+    // ── BLOQUE C: Si no hay pendientes, jalar del Vault si la cola está baja ──
     if (!pendingJob) {
-      const minBuffer = Number(config.min_queue_buffer) || 5;
+      const minBuffer = Number(config.min_queue_buffer) || 3;
+
       const { data: readyVideos } = await supabase
         .from('video_jobs')
         .select('id')
         .eq('status', 'ready_to_publish')
         .not('final_video_url', 'is', null);
 
-      const readyCount = readyVideos?.length || 0;
-      console.log(`[Autofill] Todos los videos en cola procesados. Videos listos: ${readyCount}/${minBuffer}`);
+      const readyCount = (readyVideos || []).length;
+      console.log(`[Autofill] Cola lista: ${readyCount} videos. Buffer mínimo: ${minBuffer}.`);
 
       if (readyCount < minBuffer) {
-        // Consultar títulos ya existentes en video_jobs para no insertar duplicados
+        // Traer títulos existentes para evitar duplicados
         const { data: existingJobs } = await supabase.from('video_jobs').select('title');
         const existingTitles = new Set((existingJobs || []).map(j => (j.title || '').trim().toLowerCase()));
 
@@ -79,7 +160,7 @@ async function checkAndRender() {
         const candidate = (vaultItems || []).find(v => !existingTitles.has((v.title || '').trim().toLowerCase()));
 
         if (candidate) {
-          console.log(`[Autofill] Promoviendo idea del Vault a video_jobs: "${candidate.title}"`);
+          console.log(`[Autofill] 📥 Promoviendo del Vault: "${candidate.title}"`);
           const { data: createdJob, error: createErr } = await supabase
             .from('video_jobs')
             .insert({
@@ -98,7 +179,8 @@ async function checkAndRender() {
               status: 'ready_to_publish',
               aspect_ratio: '9:16',
               target_platforms: ['facebook'],
-              brand_id: candidate.brand_id || '06a68062-00c0-413d-b41f-b2229b9d52da'
+              brand_id: candidate.brand_id || '06a68062-00c0-413d-b41f-b2229b9d52da',
+              retry_count: 0
             })
             .select()
             .single();
@@ -108,19 +190,21 @@ async function checkAndRender() {
             return;
           }
 
-          // Marcar el item del vault como 'in_queue'
           await supabase
             .from('content_vault')
             .update({ status: 'in_queue' })
             .eq('id', candidate.id);
 
           pendingJob = createdJob;
+        } else {
+          console.log('[Autofill] No hay ideas disponibles en el Vault con estado "stored".');
         }
       }
     }
 
+    // ── BLOQUE D: Disparar render del siguiente pendiente ─────────────────────
     if (pendingJob) {
-      console.log(`[Autofill] Disparando render en Flow Engine para: ${pendingJob.id} - ${pendingJob.title}`);
+      console.log(`[Autofill] 🎬 Disparando render: ${pendingJob.id} - "${pendingJob.title}"`);
       try {
         const res = await fetch('http://localhost:3001/api/flow/render', {
           method: 'POST',
@@ -128,19 +212,20 @@ async function checkAndRender() {
           body: JSON.stringify({ jobId: pendingJob.id, mode: 'full' })
         });
         const resJson = await res.json();
-        console.log('[Autofill] Respuesta de API Flow:', resJson);
+        console.log('[Autofill] Respuesta API Flow:', resJson);
       } catch (fetchErr) {
         console.warn('[Autofill] No se pudo conectar a Flow API (posiblemente ocupado):', fetchErr.message);
       }
     } else {
-      console.log('[Autofill] No hay contenido pendiente ni en video_jobs ni en content_vault.');
+      console.log('[Autofill] ✅ Todo procesado. Sin contenido pendiente.');
     }
+
   } catch (err) {
     console.error('[Autofill] Error inesperado:', err.message);
   }
 }
 
-export { checkAndRender };
+export { checkAndRender as default };
 
 // Si se ejecuta directamente desde CLI:
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {

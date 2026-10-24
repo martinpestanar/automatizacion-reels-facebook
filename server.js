@@ -19,7 +19,9 @@ let currentProgress = {
   message: 'Listo',
   isRunning: false
 };
+const serverStartTime = new Date();
 
+// ─── Render endpoint ──────────────────────────────────────────────────────────
 app.post('/api/flow/render', async (req, res) => {
   const { jobId, mode } = req.body;
   if (isRunning) {
@@ -41,11 +43,7 @@ app.post('/api/flow/render', async (req, res) => {
   try {
     console.log(`📡 Recibida petición de render para Job: ${jobId}, Modo: ${mode}`);
     await executeFlowRender(jobId, mode === 'scene_1' ? 'single_scene_1' : 'full_video_3_scenes', (prog) => {
-      currentProgress = {
-        ...currentProgress,
-        ...prog,
-        isRunning: true
-      };
+      currentProgress = { ...currentProgress, ...prog, isRunning: true };
     });
   } catch (err) {
     console.error('Error ejecutando render desde API:', err);
@@ -60,18 +58,33 @@ app.post('/api/flow/render', async (req, res) => {
     isRunning = false;
     currentProgress.isRunning = false;
 
-    // Disparar inmediatamente el siguiente en cola si quedan videos pendientes
+    // Disparar el siguiente en cola con 3s de pausa
     setTimeout(() => {
       checkAndRender().catch(err => console.warn('[Autofill Next] Error:', err.message));
     }, 3000);
   }
 });
 
+// ─── Status endpoint ──────────────────────────────────────────────────────────
 app.get('/api/flow/status', (req, res) => {
   res.json({ isRunning, progress: currentProgress });
 });
 
-// Endpoint para verificar estado de sesión (Cookies activas) y detectar email automáticamente
+// ─── Health-check endpoint ────────────────────────────────────────────────────
+app.get('/api/health', (req, res) => {
+  const uptimeMs = Date.now() - serverStartTime.getTime();
+  const uptimeMin = Math.round(uptimeMs / 60000);
+  res.json({
+    status: 'ok',
+    uptime_minutes: uptimeMin,
+    isRunning,
+    currentJob: currentProgress.jobId || null,
+    stage: currentProgress.stage,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ─── Sesiones de cuentas ──────────────────────────────────────────────────────
 app.get('/api/accounts/sessions', (req, res) => {
   const profilesDir = path.resolve('profiles');
   const sessionStatus = {};
@@ -88,16 +101,13 @@ app.get('/api/accounts/sessions', (req, res) => {
           const hasCookies = (fs.existsSync(c1) && fs.statSync(c1).size > 0) || (fs.existsSync(c2) && fs.statSync(c2).size > 0);
           sessionStatus[alias] = hasCookies;
 
-          // Extraer email real guardado en Preferences de Chrome
           const prefPath = path.join(profilesDir, alias, 'Default', 'Preferences');
           if (fs.existsSync(prefPath)) {
             try {
               const prefText = fs.readFileSync(prefPath, 'utf8');
               const matches = prefText.match(/[a-zA-Z0-9._%+-]+@gmail\.com|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
               const valid = matches.filter(e => !e.includes('google.com') && !e.includes('chromium.org'));
-              if (valid.length > 0) {
-                detectedEmails[alias] = valid[0];
-              }
+              if (valid.length > 0) detectedEmails[alias] = valid[0];
             } catch (e) {}
           }
         }
@@ -109,16 +119,13 @@ app.get('/api/accounts/sessions', (req, res) => {
   }
 });
 
-// Endpoint para abrir el navegador y loguear una cuenta de Google
+// ─── Login asistido ───────────────────────────────────────────────────────────
 app.post('/api/accounts/login', async (req, res) => {
   const { alias } = req.body;
-  if (!alias) {
-    return res.status(400).json({ error: 'Alias de cuenta requerido' });
-  }
+  if (!alias) return res.status(400).json({ error: 'Alias de cuenta requerido' });
 
   try {
     console.log(`🌐 Abriendo navegador asistido para login en: ${alias}`);
-    // No esperamos a que se cierre el navegador, devolvemos respuesta inmediata
     launchLoginSession(alias).catch(err => {
       console.error(`Error en sesión de login para ${alias}:`, err);
     });
@@ -128,9 +135,16 @@ app.post('/api/accounts/login', async (req, res) => {
   }
 });
 
+// ─── Arranque del servidor ────────────────────────────────────────────────────
 const PORT = 3001;
 app.listen(PORT, () => {
-  checkAndRender().catch(() => {});
+  console.log(`🚀 Flow Engine Local API escuchando en http://localhost:${PORT}`);
+  console.log(`❤️  Health-check disponible en http://localhost:${PORT}/api/health`);
+
+  // Primera ejecución inmediata al arrancar
+  checkAndRender().catch(e => console.error('[Autofill Arranque]', e.message));
+
+  // Cron cada 60 segundos (el finally del render ya dispara el siguiente inmediatamente)
   setInterval(async () => {
     if (!isRunning) {
       try {
@@ -139,6 +153,5 @@ app.listen(PORT, () => {
         console.error('[Autofill Cron]', e.message);
       }
     }
-  }, 15000);
-  console.log(`🚀 Flow Engine Local API escuchando en http://localhost:${PORT}`);
+  }, 60 * 1000);
 });

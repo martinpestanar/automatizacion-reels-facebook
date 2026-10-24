@@ -1,0 +1,17 @@
+{
+  "name": "mrgreen-server",
+  "script": "server.js",
+  "interpreter": "node",
+  "watch": false,
+  "autorestart": true,
+  "max_restarts": 10,
+  "min_uptime": "10s",
+  "restart_delay": 5000,
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "log_date_format": "YYYY-MM-DD HH:mm:ss",
+  "out_file": "logs/pm2_out.log",
+  "error_file": "logs/pm2_err.log",
+  "merge_logs": true
+}
