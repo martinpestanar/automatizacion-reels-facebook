@@ -328,29 +328,39 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
       await page.keyboard.insertText(sc.prompt);
       await page.waitForTimeout(800);
 
-      // Clic garantizado en el botón arrow_forward / generar
-      const submitBtn = page.locator('button:has(mat-icon:has-text("arrow_forward")), button.generate-icon-button, button[aria-label*="generación" i], button[aria-label*="generate" i], button:has-text("arrow_forward")').first();
-      if (await submitBtn.isVisible() && !(await submitBtn.isDisabled())) {
-        await submitBtn.click({ force: true });
-      } else {
-        await page.keyboard.press('Enter');
-      }
-
-      console.log(`⏳ Esperando que Google Flow inserte la nueva tarjeta de Escena ${sc.num}...`);
+      // Clic garantizado en el botón arrow_forward / generar con verificación estricta de nuevo tile
+      console.log(`⏳ Enviando prompt de Escena ${sc.num} a Google Flow...`);
       report(`scene_${sc.num}_generating`, basePct + 5, `Generando Escena ${sc.num} en Google Flow...`);
-      
-      // Esperar a que Flow cree la nueva tarjeta (el conteo debe subir o debe aparecer un nuevo tile con progreso)
-      let targetTile = page.locator('flow-video-tile, flow-grid-tile-container').first();
-      for (let waitCount = 0; waitCount < 20; waitCount++) {
-        const currentCount = await page.locator('flow-video-tile, flow-grid-tile-container').count();
-        if (currentCount > prevTilesCount) {
-          console.log(`🆕 Nueva tarjeta de Escena ${sc.num} detectada en la galería (Total: ${currentCount})`);
-          break;
+
+      let newTileAppeared = false;
+      for (let sendAttempt = 0; sendAttempt < 3; sendAttempt++) {
+        const submitBtn = page.locator('button:has(mat-icon:has-text("arrow_forward")), button.generate-icon-button, button[aria-label*="generación" i], button[aria-label*="generate" i], button:has-text("arrow_forward")').first();
+        if (await submitBtn.isVisible() && !(await submitBtn.isDisabled())) {
+          await submitBtn.click({ force: true });
+        } else {
+          await input.focus();
+          await page.keyboard.press('Enter');
         }
-        await page.waitForTimeout(1000);
+
+        // Esperar activamente a que el conteo de tarjetas suba estrictamente en la galería
+        for (let waitCount = 0; waitCount < 10; waitCount++) {
+          await page.waitForTimeout(1000);
+          const currentCount = await page.locator('flow-video-tile, flow-grid-tile-container').count();
+          if (currentCount > prevTilesCount) {
+            console.log(`🆕 ¡Nueva tarjeta de Escena ${sc.num} creada exitosamente en Flow! (Total: ${currentCount}, Anterior: ${prevTilesCount})`);
+            newTileAppeared = true;
+            break;
+          }
+        }
+        if (newTileAppeared) break;
+        console.warn(`⚠️ Intento ${sendAttempt + 1}: Flow no creó la nueva tarjeta para la Escena ${sc.num}. Reintentando click en submit...`);
       }
 
-      // Si no es la primera escena, asegurarnos de que la tarjeta superior no sea la completada previamente
+      if (!newTileAppeared) {
+        throw new Error(`Google Flow no inició la generación de la Escena ${sc.num} (no se creó una nueva tarjeta en la galería).`);
+      }
+
+      // Si no es la primera escena, verificar que la tarjeta superior no sea la completada previamente
       if (downloadedClips.length > 0) {
         console.log(`⏳ Verificando que la tarjeta superior comience el ciclo de renderizado de la Escena ${sc.num}...`);
         for (let waitGen = 0; waitGen < 15; waitGen++) {
@@ -368,6 +378,7 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
 
       // 1. Esperar a que la tarjeta más reciente termine de generar
       let tileReady = false;
+      let targetTile = page.locator('flow-video-tile, flow-grid-tile-container').first();
       for (let attempt = 0; attempt < 50; attempt++) {
         targetTile = page.locator('flow-video-tile, flow-grid-tile-container').first();
         const text = await targetTile.innerText().catch(() => '');
