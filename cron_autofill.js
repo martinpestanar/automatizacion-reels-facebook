@@ -25,7 +25,7 @@ async function getConfig() {
   };
 }
 
-// ─── AUTO-PUBLICACIÓN: Dispara el webhook de n8n para un video ───────────────
+// ─── AUTO-PUBLICACIÓN: Dispara los webhooks de n8n para Video y para Historia ───────────────
 async function autoPublishVideo(job, config) {
   try {
     // Bloquear ANTES de disparar webhook para evitar doble publicación
@@ -34,26 +34,62 @@ async function autoPublishVideo(job, config) {
       published_at: new Date().toISOString()
     }).eq('id', job.id).eq('status', 'ready_to_publish'); // condición extra de seguridad
 
-    console.log(`📤 [AutoPublish] Disparando n8n webhook para: "${job.title}"`);
+    console.log(`📤 [AutoPublish] Disparando n8n webhook de REEL para: "${job.title}"`);
 
-    const payload = {
+    const reelPayload = {
       id: job.id,
       publish_target: 'reel',
       final_video_url: job.final_video_url,
       copy_text: job.copy_text || '',
+      topic: job.topic || job.pilar,
       title: job.title,
+      aspect_ratio: '9:16',
       brand_id: job.brand_id || '06a68062-00c0-413d-b41f-b2229b9d52da',
+      image_prompt: job.image_prompt || null,
       image_url: job.image_url || null,
       image_copy_text: job.image_copy_text || null
     };
 
-    const res = await fetch('https://n8n.koratflow.agency/webhook/publish-now', {
+    const resReel = await fetch('https://n8n.koratflow.agency/webhook/publish-now', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(reelPayload)
     });
 
-    console.log(`✅ [AutoPublish] Webhook respondió: ${res.status} para "${job.title}"`);
+    console.log(`✅ [AutoPublish] Webhook REEL respondió: ${resReel.status} para "${job.title}"`);
+
+    // Publicar también en Historias de Facebook si está habilitado en la configuración
+    if (config.publish_to_stories !== false) {
+      console.log(`📱 [AutoPublish] Esperando 3s antes de publicar Historia en Facebook...`);
+      await new Promise(r => setTimeout(r, 3000));
+
+      console.log(`📱 [AutoPublish] Disparando n8n webhook de HISTORIA para: "${job.title}"`);
+      const storyPayload = {
+        id: job.id,
+        publish_target: 'story',
+        final_video_url: job.final_video_url,
+        copy_text: job.copy_text || '',
+        topic: job.topic || job.pilar,
+        title: job.title,
+        aspect_ratio: '9:16',
+        brand_id: job.brand_id || '06a68062-00c0-413d-b41f-b2229b9d52da',
+        image_prompt: job.image_prompt || null,
+        image_url: job.image_url || null,
+        image_copy_text: job.image_copy_text || null
+      };
+
+      try {
+        const resStory = await fetch('https://n8n.koratflow.agency/webhook/publish-now', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(storyPayload)
+        });
+        console.log(`🎉 [AutoPublish] Webhook HISTORIA respondió: ${resStory.status} para "${job.title}"`);
+      } catch (storyErr) {
+        console.warn(`⚠️ [AutoPublish] Error despachando Historia a n8n:`, storyErr.message);
+      }
+    }
+
     return true;
   } catch (err) {
     console.error(`❌ [AutoPublish] Error publicando "${job.title}":`, err.message);
