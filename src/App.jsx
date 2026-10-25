@@ -6,7 +6,7 @@ import {
   Flame, ShieldCheck, Settings, BarChart3, BookOpen, Edit3,
   SlidersHorizontal, Check, Copy, ExternalLink, Send, Database, FileText,
   Trash2, Edit, X, Save, CheckSquare, Square, ChevronDown, ChevronUp, Search, Filter, HelpCircle,
-  Calendar, Power, ToggleLeft, ToggleRight, Zap, Bot, Image as ImageIcon
+  Calendar, Power, ToggleLeft, ToggleRight, Zap, Bot, Image as ImageIcon, Upload, Loader2
 } from 'lucide-react';
 
 const supabaseUrl = 'https://hywlytsbogbassecflbw.supabase.co';
@@ -82,6 +82,16 @@ export default function App() {
   const [publishingMode, setPublishingMode] = useState(localStorage.getItem('publishingMode') || 'manual'); // 'manual' (revisar antes de publicar) | 'auto' (publicar directo al terminar render)
   const [publishingJobId, setPublishingJobId] = useState(null);
   const [publishingImageId, setPublishingImageId] = useState(null); // ID del video enviándose por webhook
+
+  // Estado para subida manual de imagen
+  const [showManualImageModal, setShowManualImageModal] = useState(false);
+  const [uploadingManualImage, setUploadingManualImage] = useState(false);
+  const [manualImageForm, setManualImageForm] = useState({
+    title: '',
+    copy_text: '',
+    file: null,
+    previewUrl: null
+  });
 
   // Widget de Automatización de Publicación Diaria (Jardinería / Mr. Green)
   const defaultAutoConfig = {
@@ -1031,6 +1041,65 @@ export default function App() {
     }
   }
 
+  // Subir imagen manualmente a la Galería
+  async function handleUploadManualImage(e) {
+    e.preventDefault();
+    if (!manualImageForm.file) {
+      showToast('⚠️ Por favor selecciona un archivo de imagen.');
+      return;
+    }
+    if (!manualImageForm.title.trim()) {
+      showToast('⚠️ Por favor ingresa un título para la imagen.');
+      return;
+    }
+
+    try {
+      setUploadingManualImage(true);
+      showToast('📤 Subiendo imagen a Supabase Storage...');
+
+      const fileExt = manualImageForm.file.name.split('.').pop() || 'jpg';
+      const fileName = `manual_image_${Date.now()}.${fileExt}`;
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('mrgreen-videos')
+        .upload(fileName, manualImageForm.file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: pubData } = supabase.storage
+        .from('mrgreen-videos')
+        .getPublicUrl(fileName);
+
+      const publicUrl = pubData?.publicUrl;
+
+      showToast('💾 Registrando imagen en la galería...');
+      const { error: insertErr } = await supabase.from('video_jobs').insert({
+        title: manualImageForm.title.trim(),
+        topic: 'Imagen Manual',
+        image_url: publicUrl,
+        image_status: 'pending',
+        image_copy_text: manualImageForm.copy_text.trim() || '¿Qué opinas sobre este consejo de jardinería? 🌱 Coméntanos abajo 👇 #MrGreen #HuertoEnCasa',
+        copy_text: manualImageForm.copy_text.trim() || '¿Qué opinas sobre este consejo de jardinería? 🌱 Coméntanos abajo 👇 #MrGreen #HuertoEnCasa',
+        status: 'published',
+        brand_id: selectedBrand?.id || '06a68062-00c0-413d-b41f-b2229b9d52da'
+      });
+
+      if (insertErr) throw insertErr;
+
+      showToast('✅ ¡Imagen agregada con éxito a la galería!');
+      setShowManualImageModal(false);
+      setManualImageForm({ title: '', copy_text: '', file: null, previewUrl: null });
+      fetchData();
+    } catch (err) {
+      console.error('Error subiendo imagen manual:', err);
+      showToast('❌ Error subiendo imagen: ' + err.message);
+    } finally {
+      setUploadingManualImage(false);
+    }
+  }
+
   // Publicar manualmente un video aprobado hacia la página / redes vía n8n webhook (Feed/Reels o Historias Independientes)
   async function handlePublishToSocial(vid, targetType = 'reel') {
     if (!vid.final_video_url) {
@@ -1372,6 +1441,7 @@ export default function App() {
             <span className="text-xs uppercase tracking-wider font-bold text-[var(--text-secondary)]">
               {activeTab === 'vault' && '📦 Banco de Contenido & Lotes'}
               {activeTab === 'queue' && '🎬 Monitor de Cola & Renders'}
+              {activeTab === 'images' && '🖼️ Galería y Despacho de Imágenes'}
               {activeTab === 'studio' && '✨ Generador Manual'}
               {activeTab === 'templates' && '🌱 Biblia Botánica (5 Pilares)'}
               {activeTab === 'settings' && '⚙️ Parámetros de Render'}
@@ -2002,24 +2072,29 @@ export default function App() {
                       <button
                         type="button"
                         onClick={async () => {
-                          showToast('🤖 Solicitando al Agente IA lote de 15 guiones botánicos...');
+                          showToast('🤖 Solicitando al Agente IA lote de 10 cards maestras (24s)...');
                           setIsGenerating(true);
                           try {
-                            // Enviar petición al Agente IA / Generador oficial
-                            await handleGenerateDailyBatch();
-                            showToast('🎉 ¡15 guiones generados y guardados en tu Banco!');
+                            const res = await fetch('http://localhost:3001/api/vault/generate', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ count: 10 })
+                            });
+                            const data = await res.json();
+                            if (data.error) throw new Error(data.error);
+                            showToast('🎉 ¡Generación de 10 cards iniciada en segundo plano! Aparecerán en segundos...');
                           } catch (e) {
-                            showToast('Error generando con IA: ' + e.message);
+                            showToast('Error conectando con el motor: ' + e.message);
                           } finally {
                             setIsGenerating(false);
                           }
                         }}
                         disabled={isGenerating}
                         className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-bold cursor-pointer shadow-xs transition disabled:opacity-50"
-                        title="Pide al Agente IA generar 15 nuevos guiones botánicos con Nano Banana"
+                        title="Pide al Agente IA generar 10 nuevas cards botánicas maestras para el Banco"
                       >
                         <Sparkles className="w-3.5 h-3.5" />
-                        {isGenerating ? 'Generando 15...' : '🤖 Generar 15 con Agente IA'}
+                        {isGenerating ? 'Generando 10...' : '🤖 Generar 10 con Agente IA'}
                       </button>
 
                       <button
@@ -3086,6 +3161,298 @@ export default function App() {
                     </div>
                   );
                 })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: GALERÍA DE IMÁGENES & DESPACHO MANUAL */}
+          {activeTab === 'images' && (
+            <div className="space-y-6">
+              {/* Header de la Galería */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--bg-surface)] p-6 rounded-2xl border border-[var(--border-color)] shadow-xs">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                      <ImageIcon className="w-5 h-5" />
+                    </span>
+                    <h2 className="text-xl font-black tracking-tight text-[var(--text-primary)]">
+                      Galería & Despacho de Imágenes
+                    </h2>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1.5 max-w-2xl">
+                    Imágenes satélite (1080x1350, ratio 4:5) generadas automáticamente desde cada render, o subidas manualmente para publicar directo a tu página de Facebook.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowManualImageModal(true)}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Subir Imagen Manual</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fetchData}
+                    className="p-2.5 rounded-xl border border-[var(--border-color)] hover:bg-[var(--bg-subtle)] text-[var(--text-secondary)] transition cursor-pointer"
+                    title="Actualizar galería"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista o Grid de Imágenes */}
+              {videos.filter(v => v.image_url && v.image_status !== 'dismissed').length === 0 ? (
+                <div className="py-20 flex flex-col items-center justify-center border-2 border-dashed border-[var(--border-color)] rounded-3xl bg-[var(--bg-surface)]/50 text-center p-6 space-y-4">
+                  <div className="w-16 h-16 rounded-3xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                    <ImageIcon className="w-8 h-8" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold text-[var(--text-primary)]">No hay imágenes en la galería aún</p>
+                    <p className="text-xs text-[var(--text-secondary)] max-w-md">
+                      Las imágenes satélite se generan automáticamente cuando cada render en Google Flow finaliza, o puedes subir una imagen manualmente ahora mismo.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowManualImageModal(true)}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Subir Mi Primera Imagen</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {videos
+                    .filter(v => v.image_url && v.image_status !== 'dismissed')
+                    .map((item) => {
+                      const isPublished = item.image_status === 'published';
+                      const copyText = item.image_copy_text || item.copy_text || '¿Qué opinas sobre este consejo de jardinería? 🌱 #MrGreen #HuertoEnCasa';
+                      return (
+                        <div
+                          key={item.id}
+                          className="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-xs overflow-hidden flex flex-col transition hover:shadow-md hover:border-amber-500/40"
+                        >
+                          {/* Header con Título y Badge */}
+                          <div className="bg-[var(--bg-subtle)] px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between gap-2">
+                            <span className="font-bold text-xs truncate max-w-[200px]" title={item.title}>
+                              {item.title}
+                            </span>
+                            {isPublished ? (
+                              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-blue-500/15 text-blue-600 border border-blue-500/30 shrink-0">
+                                Publicada
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 border border-amber-500/30 shrink-0">
+                                Pendiente
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Contenedor de la Imagen */}
+                          <div className="relative aspect-[4/5] w-full bg-stone-900 overflow-hidden flex items-center justify-center group">
+                            <img
+                              src={item.image_url}
+                              alt={item.title}
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              loading="lazy"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <a
+                                href={item.image_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2.5 rounded-xl bg-black/70 backdrop-blur-md text-white hover:bg-black/90 transition shadow-lg"
+                                title="Ver en tamaño original"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                            </div>
+                          </div>
+
+                          {/* Copy y Datos */}
+                          <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-secondary)]">
+                                Copy para Facebook:
+                              </span>
+                              <p className="text-xs text-[var(--text-primary)] line-clamp-3 bg-[var(--bg-subtle)] p-2.5 rounded-xl border border-[var(--border-color)] italic">
+                                "{copyText}"
+                              </p>
+                            </div>
+
+                            {/* Acciones */}
+                            <div className="space-y-2 pt-2 border-t border-[var(--border-color)]">
+                              <button
+                                type="button"
+                                disabled={publishingImageId === item.id}
+                                onClick={() => handlePublishImage(item)}
+                                className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-50 ${
+                                  isPublished
+                                    ? 'bg-[var(--bg-subtle)] hover:bg-blue-600 hover:text-white border border-[var(--border-color)] text-[var(--text-primary)]'
+                                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'
+                                }`}
+                                title="Publicar inmediatamente esta foto a la página de Facebook"
+                              >
+                                <Send className={`w-3.5 h-3.5 ${publishingImageId === item.id ? 'animate-bounce' : ''}`} />
+                                <span>
+                                  {publishingImageId === item.id
+                                    ? 'Publicando en Facebook...'
+                                    : isPublished
+                                    ? 'Volver a Publicar en Facebook'
+                                    : '🚀 Despachar a Facebook'}
+                                </span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDismissImage(item.id)}
+                                className="w-full py-1.5 px-3 rounded-xl border border-[var(--border-color)] hover:bg-red-500/10 hover:text-red-600 hover:border-red-500/30 text-[var(--text-secondary)] text-[11px] font-semibold transition cursor-pointer flex items-center justify-center gap-1.5"
+                                title="Ocultar de la galería"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Descartar de la Galería</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+
+              {/* MODAL PARA SUBIR IMAGEN MANUAL */}
+              {showManualImageModal && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+                    <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600">
+                          <Upload className="w-5 h-5" />
+                        </span>
+                        <div>
+                          <h3 className="font-bold text-base text-[var(--text-primary)]">Subir Imagen Manual</h3>
+                          <p className="text-[11px] text-[var(--text-secondary)]">Recomendado: ratio 4:5 vertical (1080x1350)</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowManualImageModal(false)}
+                        className="p-1.5 rounded-xl hover:bg-[var(--bg-subtle)] text-[var(--text-secondary)]"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleUploadManualImage} className="space-y-4">
+                      {/* Dropzone o selector de archivo */}
+                      <div>
+                        <label className="text-xs font-bold text-[var(--text-primary)] block mb-1.5">
+                          Archivo de Imagen
+                        </label>
+                        <div className="border-2 border-dashed border-[var(--border-color)] hover:border-emerald-500 rounded-2xl p-4 text-center cursor-pointer transition bg-[var(--bg-subtle)] relative overflow-hidden">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            required
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setManualImageForm(prev => ({
+                                  ...prev,
+                                  file,
+                                  previewUrl: URL.createObjectURL(file),
+                                  title: prev.title || file.name.replace(/\.[^/.]+$/, "")
+                                }));
+                              }
+                            }}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
+                          {manualImageForm.previewUrl ? (
+                            <div className="flex flex-col items-center gap-2">
+                              <img
+                                src={manualImageForm.previewUrl}
+                                alt="Preview"
+                                className="h-44 object-contain rounded-xl border border-[var(--border-color)]"
+                              />
+                              <span className="text-[11px] font-mono text-emerald-600 font-bold">
+                                {manualImageForm.file?.name} ({Math.round((manualImageForm.file?.size || 0) / 1024)} KB)
+                              </span>
+                              <span className="text-[10px] text-[var(--text-secondary)]">Haz clic para cambiar de archivo</span>
+                            </div>
+                          ) : (
+                            <div className="py-6 flex flex-col items-center gap-2">
+                              <Upload className="w-8 h-8 text-[var(--text-secondary)]" />
+                              <span className="text-xs font-bold text-[var(--text-primary)]">Haz clic o arrastra tu imagen aquí</span>
+                              <span className="text-[10px] text-[var(--text-secondary)]">PNG, JPG, WEBP hasta 10MB</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Título */}
+                      <div>
+                        <label className="text-xs font-bold text-[var(--text-primary)] block mb-1">
+                          Título o Asunto de la Imagen
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={manualImageForm.title}
+                          onChange={(e) => setManualImageForm({ ...manualImageForm, title: e.target.value })}
+                          placeholder="Ej: Guía Visual del Mulch Orgánico"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] text-xs font-semibold focus:outline-hidden focus:border-emerald-500"
+                        />
+                      </div>
+
+                      {/* Copy para Facebook */}
+                      <div>
+                        <label className="text-xs font-bold text-[var(--text-primary)] block mb-1">
+                          Copy / Descripción para Facebook
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={manualImageForm.copy_text}
+                          onChange={(e) => setManualImageForm({ ...manualImageForm, copy_text: e.target.value })}
+                          placeholder="Escribe el texto que acompañará la publicación en Facebook con hashtags..."
+                          className="w-full px-3.5 py-2 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] text-xs focus:outline-hidden focus:border-emerald-500"
+                        />
+                      </div>
+
+                      {/* Botones */}
+                      <div className="flex items-center justify-end gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowManualImageModal(false)}
+                          className="px-4 py-2 rounded-xl border border-[var(--border-color)] text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] transition"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={uploadingManualImage}
+                          className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                        >
+                          {uploadingManualImage ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Subiendo imagen...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>Guardar en Galería</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               )}
             </div>
