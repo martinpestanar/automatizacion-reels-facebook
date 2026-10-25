@@ -113,43 +113,10 @@ export async function checkAndRender() {
       return;
     }
 
-    // ── BLOQUE A: Auto-publicación de hasta 5 videos por día ──────────────────
-    const dailyTarget = Number(config.daily_target_videos) || 5;
-
-    // Calcular inicio del día actual (medianoche local → UTC)
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    const { data: publishedToday } = await supabase
-      .from('video_jobs')
-      .select('id')
-      .eq('status', 'published')
-      .gte('published_at', todayStart.toISOString());
-
-    const publishedCount = (publishedToday || []).length;
-
-    if (publishedCount < dailyTarget) {
-      const remaining = dailyTarget - publishedCount;
-      console.log(`[AutoPublish] Publicados hoy: ${publishedCount}/${dailyTarget}. Buscando ${remaining} video(s) para publicar...`);
-
-      // Buscar videos listos (con video final) ordenados por más antiguos primero
-      const { data: readyVideos } = await supabase
-        .from('video_jobs')
-        .select('id, title, final_video_url, copy_text, image_url, image_copy_text, brand_id')
-        .eq('status', 'ready_to_publish')
-        .not('final_video_url', 'is', null)
-        .order('created_at', { ascending: true })
-        .limit(remaining);
-
-      for (const video of (readyVideos || [])) {
-        console.log(`[AutoPublish] → Publicando automáticamente: "${video.title}"`);
-        await autoPublishVideo(video, config);
-        // Pequeña pausa entre publicaciones para no saturar n8n
-        await new Promise(r => setTimeout(r, 3000));
-      }
-    } else {
-      console.log(`[AutoPublish] Meta diaria cumplida: ${publishedCount}/${dailyTarget} videos publicados hoy. ✅`);
-    }
+    // ── NOTA DE ARQUITECTURA: La publicación programada a Facebook (Reels, Historias e Imágenes)
+    // es gestionada 100% de forma autónoma por n8n mediante su workflow de producción
+    // "Mr. Green - Publicación Automática Videos y Fotos Facebook" (Trigger Cron en n8n).
+    // El servidor local se enfoca exclusivamente en la orquestación y renderizado de videos en Google Flow.
 
     // ── BLOQUE B: Renderizar videos pendientes ─────────────────────────────────
     // IMPORTANTE: NO incluir 'rendering' — si ya está procesando, isRunning lo bloquea

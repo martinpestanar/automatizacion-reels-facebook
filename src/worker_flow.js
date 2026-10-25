@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import https from 'https';
 import crypto from 'crypto';
+import { execSync } from 'child_process';
 import { stitchScenes } from './stitcher/index.js';
 import { getAvailableAccount, recordAccountUsage } from './accounts/rotator.js';
 
@@ -90,16 +91,21 @@ async function openFlowAndConfigure(context, settings, report) {
 
   // 1. Abrir proyecto existente o crear nuevo
   console.log('📂 Buscando proyecto en Google Flow...');
-  const projectLocator = page.locator('a.project-thumbnail-container, a[aria-label*="proyecto" i], a[aria-label*="project" i]').first();
-  const hasProject = await projectLocator.isVisible({ timeout: 5000 }).catch(() => false);
+  const projectLocator = page.locator('a.project-thumbnail-container, a[aria-label*="proyecto" i], a[aria-label*="project" i], div.project-card, .project-tile').first();
+  const hasProject = await projectLocator.isVisible({ timeout: 6000 }).catch(() => false);
 
   if (hasProject) {
     console.log('Abriendo proyecto existente...');
     await projectLocator.click();
   } else {
     console.log('Creando nuevo proyecto en Google Flow...');
-    const newBtn = page.locator('button.new-project-button, button:has-text("Nuevo proyecto"), button:has-text("New project")').first();
-    await newBtn.click();
+    const newBtn = page.locator('button.new-project-button, button:has-text("Nuevo proyecto"), button:has-text("New project"), button:has-text("Crear"), button:has-text("Create"), a:has-text("New project")').first();
+    if (await newBtn.isVisible({ timeout: 8000 }).catch(() => false)) {
+      await newBtn.click();
+    } else {
+      console.log('Navegando directamente a nuevo proyecto Flow...');
+      await page.goto('https://flow.google.com/project/new', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+    }
   }
 
   await page.waitForTimeout(4000);
@@ -266,12 +272,18 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
   // Contar tiles antes de enviar el prompt
   const prevTilesCount = await page.locator('flow-video-tile, flow-grid-tile-container').count();
 
+  // Asegurar que el prompt enviado a Google Flow indique explícitamente idioma español
+  let finalPrompt = sc.prompt || '';
+  if (!finalPrompt.includes('IDIOMA') && !finalPrompt.includes('ESPAÑOL')) {
+    finalPrompt = `[DIRECTIVA OBLIGATORIA: Todo texto visible en pantalla y todo audio/voz debe ser EXCLUSIVAMENTE en ESPAÑOL NEUTRO. No usar inglés.]\n` + finalPrompt;
+  }
+
   const input = page.locator('.ProseMirror, [contenteditable="true"]').first();
   await input.waitFor({ state: 'visible', timeout: 20000 });
   await input.click({ force: true });
   await page.keyboard.press('Control+A');
   await page.keyboard.press('Backspace');
-  await page.keyboard.insertText(sc.prompt);
+  await page.keyboard.insertText(finalPrompt);
   await page.waitForTimeout(800);
 
   console.log(`⏳ Enviando prompt de Escena ${sc.num} a Google Flow...`);
@@ -327,12 +339,15 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
   for (let attempt = 0; attempt < TILE_READY_ATTEMPTS; attempt++) {
     targetTile = page.locator('flow-video-tile, flow-grid-tile-container').first();
     const text = await targetTile.innerText().catch(() => '');
-    if (text.includes('play_circle') || (!text.includes('%') && text.trim().length > 0)) {
+    const isGenerating = text.includes('%') || text.includes('Generando') || text.includes('Generating') || text.includes('Renderizando');
+    
+    // Un tile está realmente listo si NO está en progreso (%) Y pasaron al menos 20 segundos
+    if (!isGenerating && attempt >= 7 && (text.includes('play_circle') || text.includes('0:08') || text.includes('8s') || text.trim().length > 0)) {
       tileReady = true;
       console.log(`✅ Escena ${sc.num} lista en el intento ${attempt + 1} (${(attempt + 1) * TILE_READY_INTERVAL / 1000}s)`);
       break;
     }
-    if (attempt % 10 === 0) {
+    if (attempt % 5 === 0) {
       console.log(`⏳ Escena ${sc.num} aún renderizando... (${attempt * TILE_READY_INTERVAL / 1000}s / ${TILE_READY_ATTEMPTS * TILE_READY_INTERVAL / 1000}s)`);
     }
     await page.waitForTimeout(TILE_READY_INTERVAL);
@@ -344,39 +359,39 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
 
   await page.waitForTimeout(2000);
 
-  // Abrir la tarjeta
+  // Abrir la tarjeta haciendo clic en su centro para mostrar la barra de control/acciones
   console.log(`🔍 Abriendo tarjeta de Escena ${sc.num}...`);
-  await targetTile.click({ force: true });
-  await page.waitForTimeout(2500);
-
-  // Botón Descargar
-  const dlBtn = page.locator('button[aria-label*="Descargar" i], button[aria-label*="Download" i], button:has-text("download")').first();
-  await dlBtn.waitFor({ state: 'visible', timeout: 30000 });
-
-  let isReady = false;
-  for (let attempt = 0; attempt < 25; attempt++) {
-    const disabled = await dlBtn.isDisabled().catch(() => true);
-    if (!disabled) { isReady = true; break; }
-    await page.waitForTimeout(3000);
+  await page.waitForTimeout(1000);
+  const currentTile = page.locator('flow-grid-tile-container, flow-video-tile').first();
+  await currentTile.scrollIntoViewIfNeeded().catch(() => {});
+  const box = await currentTile.boundingBox();
+  if (box) {
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  } else {
+    await currentTile.click({ force: true }).catch(() => {});
   }
+  await page.waitForTimeout(2000);
 
-  if (!isReady) {
-    throw new Error(`Timeout esperando que Google Flow habilite la descarga de Escena ${sc.num}`);
-  }
-
-  await dlBtn.click();
+  // Botón Descargar en la barra de la tarjeta seleccionada
+  const dlBtn = page.locator('button[aria-label*="Descargar" i], button[aria-label*="Download" i]').first();
+  await dlBtn.waitFor({ state: 'visible', timeout: 25000 });
+  await dlBtn.click({ force: true });
   await page.waitForTimeout(1000);
 
-  const opt720 = page.locator('.cdk-overlay-container button[role="menuitem"]:has-text("720p"), button[role="menuitem"]:has-text("720p")').first();
-  await opt720.waitFor({ state: 'visible', timeout: 10000 });
+  const opt720 = page.locator('.cdk-overlay-container button:has-text("720p"), .cdk-overlay-container [role="menuitem"]:has-text("720p"), button[role="menuitem"]:has-text("720p")').first();
+  await opt720.waitFor({ state: 'visible', timeout: 15000 });
 
   const clipPath = path.join(tempDir, `clip_${job.id}_s${sc.num}.mp4`);
   console.log(`📥 Descargando Escena ${sc.num}...`);
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: DOWNLOAD_TIMEOUT }),
-    opt720.click()
+    opt720.click({ force: true })
   ]);
   await download.saveAs(clipPath);
+
+  // Cerrar cualquier menú residual abierto
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
 
   // Verificación de integridad MD5
   const clipBuffer = fs.readFileSync(clipPath);
@@ -416,15 +431,10 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
     }
   }
 
-  // Volver a la galería
-  console.log(`🔒 Cerrando visor de Escena ${sc.num}...`);
+  // Asegurar que el input de prompt esté libre y listo para la siguiente escena
   for (let attempt = 0; attempt < 3; attempt++) {
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
-    const closeBtn = page.locator('button[aria-label*="Cerrar" i], button[aria-label*="Close" i], button[aria-label*="Atrás" i], button[aria-label*="Back" i], button:has-text("arrow_back"), button:has-text("close")').first();
-    if (await closeBtn.isVisible({ timeout: 500 }).catch(() => false)) {
-      await closeBtn.click({ force: true }).catch(() => {});
-    }
+    await page.waitForTimeout(300);
   }
   const promptInput = page.locator('.ProseMirror, [contenteditable="true"]').first();
   await promptInput.waitFor({ state: 'visible', timeout: 15000 });
@@ -497,6 +507,7 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
       ];
 
   const downloadedClips = [];
+  const clipsBySceneNum = {};
   let context = null;
   let page = null;
   let selectedAccount = null;
@@ -518,6 +529,7 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
         if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 0) {
           console.log(`✅ [Checkpoint] Escena ${sc.num} reutilizada desde Supabase Storage.`);
           downloadedClips.push(clipPath);
+          clipsBySceneNum[sc.num] = clipPath;
         } else {
           console.warn(`⚠️ [Checkpoint] Escena ${sc.num} no se pudo descargar, se re-renderizará.`);
           scenesToProcess.push(sc);
@@ -557,6 +569,7 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
           const clipPath = await generateScene(page, sc, job, tempDir, downloadedClips, report, basePct);
 
           downloadedClips.push(clipPath);
+          clipsBySceneNum[sc.num] = clipPath;
           console.log(`✅ Escena ${sc.num} descargada y validada: ${clipPath}`);
 
           // Subir clip individual a Supabase Storage (checkpoint)
@@ -652,8 +665,16 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
     } else {
       report('stitching', 82, 'Uniendo las 3 escenas con FFmpeg...');
       const stitchedPath = path.join(tempDir, `full_video_${job.id}.mp4`);
-      console.log('🎞️ Uniendo clips con FFmpeg a 9:16 vertical...');
-      await stitchScenes(downloadedClips, stitchedPath);
+      console.log('🎞️ Uniendo clips con FFmpeg a 9:16 vertical en orden estricto (1 -> 2 -> 3)...');
+
+      // 🛡️ BLINDAJE CANÓNICO: Asegurar orden 1, 2, 3 sin importar el orden en que se renderizaron o descargaron
+      const orderedClips = [1, 2, 3]
+        .map(num => clipsBySceneNum[num])
+        .filter(p => p && fs.existsSync(p));
+
+      const clipsToStitch = orderedClips.length === 3 ? orderedClips : downloadedClips;
+      console.log('Clips ordenados para stitching:', clipsToStitch);
+      await stitchScenes(clipsToStitch, stitchedPath);
 
       report('uploading', 92, 'Subiendo video maestro...');
       const buffer = fs.readFileSync(stitchedPath);
@@ -664,11 +685,12 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
       console.log('🎉 Video Final subido a Supabase:', finalVideoUrl);
 
       // 🧹 Limpiar clips individuales del disco (ya están en Supabase Storage)
-      cleanupTempFiles([...downloadedClips, stitchedPath]);
+      // Mantener stitchedPath temporalmente para la extracción de imagen 4:5
+      cleanupTempFiles(downloadedClips);
     }
 
     if (finalVideoUrl) {
-      report('done', 96, '¡Video listo! Generando imagen satélite...');
+      report('done', 96, '¡Video listo! Generando imagen satélite vertical 4:5...');
       await supabase.from('video_jobs').update({
         final_video_url: finalVideoUrl,
         aspect_ratio: '9:16',
@@ -685,102 +707,38 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
       }
     }
 
-    // ─── Generación de imagen Nano Banana ────────────────────────────────────
-    if (job.image_prompt && job.image_prompt.trim() && page) {
-      try {
-        console.log('\n🍌 Iniciando Imagen Satélite Nano Banana...');
-        report('generating_image', 97, 'Generando Imagen Satélite (Nano Banana)...');
+    // ─── Generación de Imagen Satélite Vertical 4:5 (1080x1350 para Facebook Feed) ──
+    try {
+      console.log('\n📸 Generando Imagen Satélite Vertical 4:5 para Facebook Feed...');
+      report('generating_image', 97, 'Generando Imagen Satélite Vertical 4:5...');
 
-        const triggerSettings = page.locator('button.settings-trigger-button').first();
-        if (await triggerSettings.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await triggerSettings.click();
-          await page.waitForTimeout(600);
-          const imgToggle = page.locator('mat-button-toggle:has-text("Imagen"), mat-button-toggle:has-text("Image")').first();
-          if (await imgToggle.isVisible({ timeout: 1500 }).catch(() => false)) {
-            await imgToggle.click();
-            await page.waitForTimeout(400);
+      const stitchedPath = path.join(tempDir, `full_video_${job.id}.mp4`);
+      const img45Path = path.join(tempDir, `satelite_4_5_${job.id}.jpg`);
+
+      // Si existe el video local, extraemos el frame clave en ratio 4:5 (1080x1350)
+      if (fs.existsSync(stitchedPath)) {
+        const vf = 'scale=1080:1920,crop=1080:1350:0:(in_h-out_h)/2';
+        const cmd = `ffmpeg -y -ss 00:00:03.000 -i "${stitchedPath}" -vframes 1 -vf "${vf}" -q:v 2 "${img45Path}"`;
+        execSync(cmd);
+
+        if (fs.existsSync(img45Path) && fs.statSync(img45Path).size > 0) {
+          const imgBuffer = fs.readFileSync(img45Path);
+          const imgUploadName = `satelite_vertical_4_5_${job.id}_${Date.now()}.jpg`;
+          await supabase.storage.from('mrgreen-videos').upload(imgUploadName, imgBuffer, { contentType: 'image/jpeg', upsert: true });
+          const { data: imgPubData } = supabase.storage.from('mrgreen-videos').getPublicUrl(imgUploadName);
+
+          if (imgPubData?.publicUrl) {
+            await supabase.from('video_jobs').update({
+              image_url: imgPubData.publicUrl,
+              image_status: 'pending'
+            }).eq('id', job.id);
+            console.log('✅ Imagen Satélite 4:5 (1080x1350) guardada en Supabase:', imgPubData.publicUrl);
           }
-          await page.keyboard.press('Escape');
-          await page.waitForTimeout(400);
+          cleanupTempFiles([img45Path, stitchedPath]);
         }
-
-        let imgInput = page.locator('.ProseMirror, [contenteditable="true"]').first();
-        if (!(await imgInput.isVisible({ timeout: 3000 }).catch(() => false))) {
-          imgInput = page.locator('textarea[placeholder*="Describe" i], textarea').first();
-        }
-
-        if (await imgInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-          await imgInput.click({ force: true });
-          await page.keyboard.press('Control+A');
-          await page.keyboard.press('Backspace');
-          await page.keyboard.insertText(job.image_prompt.trim());
-          await page.waitForTimeout(600);
-
-          const submitBtn = page.locator('button.generate-icon-button, button[aria-label*="generaci" i], button:has-text("Generar"), button:has-text("arrow_forward")').first();
-          if (await submitBtn.isVisible() && !(await submitBtn.isDisabled())) {
-            await submitBtn.click();
-          } else {
-            await page.keyboard.press('Enter');
-          }
-
-          console.log('⏳ Esperando imagen Nano Banana...');
-          await page.waitForTimeout(10000);
-
-          const generatedCard = page.locator('flow-image-tile, flow-grid-tile-container, flow-video-tile, .asset-card, .gallery-item, mat-card').first();
-          await generatedCard.waitFor({ state: 'visible', timeout: 25000 }).catch(() => {});
-
-          if (await generatedCard.isVisible().catch(() => false)) {
-            await generatedCard.click({ force: true });
-            await page.waitForTimeout(2000);
-
-            const dlBtn = page.locator('button[aria-label*="Descargar" i], button[aria-label*="Download" i]').first();
-            if (await dlBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-              const downloadPromise = page.waitForEvent('download', { timeout: 15000 }).catch(() => null);
-              await dlBtn.click();
-              const imgDownload = await downloadPromise;
-
-              if (imgDownload) {
-                const imgSavePath = path.join(tempDir, `image_satelite_${job.id}.png`);
-                await imgDownload.saveAs(imgSavePath);
-                console.log('✅ Imagen descargada:', imgSavePath);
-
-                const imgBuffer = fs.readFileSync(imgSavePath);
-                const imgUploadName = `image_${job.id}_${Date.now()}.png`;
-                await supabase.storage.from('mrgreen-videos').upload(imgUploadName, imgBuffer, { contentType: 'image/png', upsert: true });
-                const { data: imgPubData } = supabase.storage.from('mrgreen-videos').getPublicUrl(imgUploadName);
-
-                if (imgPubData?.publicUrl) {
-                  await supabase.from('video_jobs').update({ image_url: imgPubData.publicUrl }).eq('id', job.id);
-                  console.log('✅ Imagen Satélite guardada en Supabase:', imgPubData.publicUrl);
-
-                  fetch('https://n8n.koratflow.agency/webhook/publish-now', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      id: job.id,
-                      publish_target: 'photo',
-                      image_url: imgPubData.publicUrl,
-                      copy_text: job.image_copy_text || job.copy_text || '¿Qué opinas? #MrGreen #HuertoEnCasa',
-                      title: job.title,
-                      brand_id: job.brand_id || '06a68062-00c0-413d-b41f-b2229b9d52da'
-                    })
-                  }).then(async (pubRes) => {
-                    console.log('📡 Facebook Webhook Imagen:', pubRes.status);
-                    await supabase.from('video_jobs').update({
-                      image_status: 'published',
-                      image_published_at: new Date().toISOString()
-                    }).eq('id', job.id);
-                  }).catch(err => {
-                    console.warn('[Auto-Publish Image] Error:', err.message);
-                  });
-                }
-              }
-            }
-          }
-        }
-      } catch (imgErr) {
-        console.warn('Aviso Nano Banana (continuando):', imgErr.message);
       }
+    } catch (satErr) {
+      console.warn('Aviso generando imagen satélite 4:5 (continuando):', satErr.message);
     }
 
     report('done', 100, '¡Video e Imagen completados!');
@@ -793,9 +751,14 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
     report('error', 0, err.message || 'Error en Google Flow');
 
     // Incrementar retry_count. Si llega a 3, marcar error definitivo para no volver a intentar
-    const { data: currentJob } = await supabase.from('video_jobs')
-      .select('retry_count').eq('id', job.id).single().catch(() => ({ data: null }));
-    const retryCount = ((currentJob?.retry_count) || 0) + 1;
+    let retryCount = 1;
+    try {
+      const { data: currentJob } = await supabase.from('video_jobs')
+        .select('retry_count').eq('id', job.id).maybeSingle();
+      retryCount = ((currentJob?.retry_count) || 0) + 1;
+    } catch (e) {
+      retryCount = 1;
+    }
     const isDefinitive = retryCount >= 3;
 
     await supabase.from('video_jobs').update({

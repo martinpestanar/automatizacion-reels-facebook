@@ -1,3 +1,4 @@
+import { generateVaultBatch } from './src/generator/vault_generator_24s.js';
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
@@ -135,6 +136,19 @@ app.post('/api/accounts/login', async (req, res) => {
   }
 });
 
+
+// ─── Generación de Cards para Content Vault ───────────────────────────────────
+app.post('/api/vault/generate', async (req, res) => {
+  const count = parseInt(req.body?.count, 10) || 10;
+  try {
+    console.log(`🎨 Petición recibida para generar ${count} cards en el Vault...`);
+    generateVaultBatch(count).catch(err => console.error('[Vault API Async Error]', err.message));
+    res.json({ success: true, message: `Generación de ${count} cards iniciada en segundo plano.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Arranque del servidor ────────────────────────────────────────────────────
 const PORT = 3001;
 app.listen(PORT, () => {
@@ -143,6 +157,49 @@ app.listen(PORT, () => {
 
   // Primera ejecución inmediata al arrancar
   checkAndRender().catch(e => console.error('[Autofill Arranque]', e.message));
+
+  
+  // ─── CRON DE AUTOLIMPIEZA CADA 24 HORAS (Archivos temporales y jobs huérfanos) ──
+  const purgeOldTempFiles = () => {
+    try {
+      const tempPath = path.resolve('temp_renders');
+      if (fs.existsSync(tempPath)) {
+        const files = fs.readdirSync(tempPath);
+        const now = Date.now();
+        const MAX_AGE = 24 * 60 * 60 * 1000; // 24 horas
+        for (const file of files) {
+          const filePath = path.join(tempPath, file);
+          const stats = fs.statSync(filePath);
+          if (now - stats.mtimeMs > MAX_AGE) {
+            fs.unlinkSync(filePath);
+            console.log(`🧹 [AutoLimpieza 24h] Eliminado temporal antiguo: ${file}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[AutoLimpieza 24h Error]:', e.message);
+    }
+  };
+
+  // Ejecutar limpieza cada 24 horas (y una al inicio)
+  purgeOldTempFiles();
+  setInterval(purgeOldTempFiles, 24 * 60 * 60 * 1000);
+
+  // ─── CRON MATUTINO DIARIO (07:00 AM): Auto-generar 10 cards en content_vault ──
+  let lastVaultGenerationDate = null;
+  setInterval(async () => {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    if (now.getHours() === 7 && now.getMinutes() < 5 && lastVaultGenerationDate !== todayStr) {
+      lastVaultGenerationDate = todayStr;
+      console.log(`🌅 [07:00 AM] Disparando generación matutina de 10 cards para el Vault...`);
+      try {
+        await generateVaultBatch(10);
+      } catch (err) {
+        console.error('[Vault Morning Cron Error]', err.message);
+      }
+    }
+  }, 60 * 1000);
 
   // Cron cada 60 segundos (el finally del render ya dispara el siguiente inmediatamente)
   setInterval(async () => {
