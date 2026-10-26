@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { execSync } from 'child_process';
 import { stitchScenes } from './stitcher/index.js';
 import { getAvailableAccount, recordAccountUsage } from './accounts/rotator.js';
+import { generateNanoBananaInfographic } from './generator/flow_image_generator.js';
 
 dotenv.config();
 
@@ -707,38 +708,22 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
       }
     }
 
-    // ─── Generación de Imagen Satélite Vertical 4:5 (1080x1350 para Facebook Feed) ──
+    // ─── Generación de Infografía Satélite Dopamínica (Nano Banana 2.1) ──────────
     try {
-      console.log('\n📸 Generando Imagen Satélite Vertical 4:5 para Facebook Feed...');
-      report('generating_image', 97, 'Generando Imagen Satélite Vertical 4:5...');
+      console.log('\n🍌 Generando Infografía Botánica Dopamínica con Nano Banana 2.1...');
+      report('generating_image', 97, 'Generando Infografía con Nano Banana 2.1 en español...');
 
       const stitchedPath = path.join(tempDir, `full_video_${job.id}.mp4`);
-      const img45Path = path.join(tempDir, `satelite_4_5_${job.id}.jpg`);
 
-      // Si existe el video local, extraemos el frame clave en ratio 4:5 (1080x1350)
+      // 1. Generar la infografía con IA en Google Flow
+      await generateNanoBananaInfographic(job, tempDir);
+
+      // 2. Limpieza de archivos de video temporales locales
       if (fs.existsSync(stitchedPath)) {
-        const vf = 'scale=1080:1920,crop=1080:1350:0:(in_h-out_h)/2';
-        const cmd = `ffmpeg -y -ss 00:00:03.000 -i "${stitchedPath}" -vframes 1 -vf "${vf}" -q:v 2 "${img45Path}"`;
-        execSync(cmd);
-
-        if (fs.existsSync(img45Path) && fs.statSync(img45Path).size > 0) {
-          const imgBuffer = fs.readFileSync(img45Path);
-          const imgUploadName = `satelite_vertical_4_5_${job.id}_${Date.now()}.jpg`;
-          await supabase.storage.from('mrgreen-videos').upload(imgUploadName, imgBuffer, { contentType: 'image/jpeg', upsert: true });
-          const { data: imgPubData } = supabase.storage.from('mrgreen-videos').getPublicUrl(imgUploadName);
-
-          if (imgPubData?.publicUrl) {
-            await supabase.from('video_jobs').update({
-              image_url: imgPubData.publicUrl,
-              image_status: 'pending'
-            }).eq('id', job.id);
-            console.log('✅ Imagen Satélite 4:5 (1080x1350) guardada en Supabase:', imgPubData.publicUrl);
-          }
-          cleanupTempFiles([img45Path, stitchedPath]);
-        }
+        cleanupTempFiles([stitchedPath]);
       }
     } catch (satErr) {
-      console.warn('Aviso generando imagen satélite 4:5 (continuando):', satErr.message);
+      console.warn('Aviso generando infografía Nano Banana (continuando):', satErr.message);
     }
 
     report('done', 100, '¡Video e Imagen completados!');
