@@ -118,9 +118,9 @@ Cada video DEBE tener una lección clara, útil y práctica siguiendo este arco:
 
 DIRECTIVAS ESTRICTAS DE IDIOMA Y VOZ EN OFF [VOICE SCRIPT]:
 - IDIOMA: 100% ESPAÑOL NEUTRO. Queda TERMINANTEMENTE PROHIBIDO cualquier palabra en inglés en la voz y en los textos.
-- LOCUCIÓN DINÁMICA Y DIDÁCTICA: Voz en off presente en las 3 escenas, clara, cálida, con entusiasmo de maestro o mentor apasionado (tono divulgativo estilo Cosmos o BBC Earth adaptado a niños curiosos).
-- LÍMITE DE PALABRAS POR ESCENA: De 11 a 15 palabras por escena (unos 5 a 6 segundos de locución fluida con 2 segundos finales de silencio para que respire el sonido ambiente y la música).
-- Las frases deben ser directas, comprensibles y con sustancia real, NUNCA frases poéticas vacías.
+- LOCUCIÓN ESTILO DOCUMENTAL BBC EARTH (David Attenborough en español): Narrador naturalista experto, tono barítono profundo, maduro, sabio y cautivador. Habla con esa cadencia pausada, magnética y asombrosa de los documentales de la BBC Earth, pero explicando conceptos biológicos con tanta sencillez y claridad que un niño de 11 años queda fascinado.
+- LÍMITE DE PALABRAS POR ESCENA: De 10 a 14 palabras por escena (unos 5.0 a 6.0 segundos de locución con colchón de 2 segundos finales de silencio para disfrutar el sonido ambiental y la música cinematográfica).
+- Cada frase debe enseñar un hecho real o consejo concreto, con esa magia y sabiduría documental clásica de la BBC.
 
 DIRECTIVAS VISUALES Y PROMPTS DE VIDEO [VIDEO GENERATION PROMPT]:
 - Formato 9:16 vertical cinematográfico.
@@ -145,7 +145,7 @@ Time: [00:00.2 a 00:02.8 en Escena 1 con título didáctico en español / None e
 [AUDIO & SOUND DESIGN]
 SFX Hook / Transition: [Efecto sonoro nítido y placentero] | Background Music: Música acústica inspiradora o violonchelo envolvente | SFX Ambience / Action: Sonidos táctiles orgánicos (tierra crujiendo, gotas, hojas)
 [VOICE DIRECTIVE]
-Speaker Persona: Divulgador y mentor botánico en español neutro, voz cálida, clara y didáctica (explicando para un niño de 11 años), ritmo fluido y motivador, 120 wpm.
+Speaker Persona: Narrador naturalista documental BBC Earth (estilo David Attenborough en español neutro), tono barítono profundo, sabio y magnético, 110 wpm, 2.0s de colchón de silencio final, explicando la ciencia de forma simple y fascinante para un niño de 11 años.
 [VOICE SCRIPT]
 "[Guion educativo de 11 a 15 palabras en español que enseña un concepto directo]"
 [VIDEO GENERATION PROMPT]
