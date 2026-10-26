@@ -35,16 +35,26 @@ export async function generateNanoBananaInfographic(job, tempDir = 'temp_renders
     await page.goto('https://flow.google.com/', { waitUntil: 'domcontentloaded', timeout: 35000 });
     await page.waitForTimeout(3500);
 
-    // Abrir proyecto existente o crear nuevo
-    const projectLocator = page.locator('a.project-thumbnail-container, a[aria-label*="proyecto" i], a[aria-label*="project" i], div.project-card, .project-tile').first();
-    if (await projectLocator.isVisible({ timeout: 6000 }).catch(() => false)) {
-      await projectLocator.click();
-    } else {
-      const newBtn = page.locator('button.new-project-button, button:has-text("Nuevo proyecto"), button:has-text("New project"), a:has-text("New project")').first();
-      if (await newBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await newBtn.click();
+    // Verificar si la sesión es válida o fue redirigida a login/about
+    const currentUrl = page.url();
+    if (currentUrl.includes('/about') || currentUrl.includes('accounts.google.com')) {
+      console.warn(`⚠️ Sesión expirada para cuenta ${account.alias} (${account.email}). Marcando status='error' en DB...`);
+      await supabase.from('google_accounts').update({ status: 'error' }).eq('id', account.id);
+      throw new Error(`Sesión expirada en Google Flow para cuenta ${account.alias}`);
+    }
+
+    // Abrir proyecto existente o crear nuevo si no estamos dentro de uno
+    if (!page.url().includes('/project/')) {
+      const projectLocator = page.locator('a.project-thumbnail-container, a[aria-label*="proyecto" i], a[aria-label*="project" i], div.project-card, .project-tile').first();
+      if (await projectLocator.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await projectLocator.click();
       } else {
-        await page.goto('https://flow.google.com/project/new', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+        const newBtn = page.locator('button.new-project-button, button:has-text("Nuevo proyecto"), button:has-text("New project"), a:has-text("New project")').first();
+        if (await newBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+          await newBtn.click();
+        } else {
+          await page.goto('https://flow.google.com/project/new', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+        }
       }
     }
     await page.waitForTimeout(4000);
