@@ -132,6 +132,8 @@ REGLAS DE INFOGRAFÍA COMPLEMENTARIA (NANO BANANA 2.1):
 - Diagrama con flechas, llamadas de texto y comparaciones tipo "Bien vs Mal" o "Paso a paso 1, 2, 3".
 - Todos los textos dentro de la infografía 100% EN ESPAÑOL.
 - Título claro y directo de guía práctica (ej: "3 SEÑALES DE QUE TU TIERRA ESTÁ VIVA").
+- NUNCA incluir en el prompt de la imagen la palabra "Nano Banana" ni términos técnicos del sistema para evitar que el modelo de imagen los imprima como texto en la tarjeta.
+- Sutil marca "Mr. Green" en la esquina.
 - Copy de la imagen con pregunta directa y CTA para guardar la publicación.
 
 ESTRUCTURA EXACTA REQUERIDA EN CADA ESCENA:

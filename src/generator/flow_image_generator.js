@@ -90,17 +90,19 @@ export async function generateNanoBananaInfographic(job, tempDir = 'temp_renders
     // Contar tarjetas antes de generar
     const prevCount = await page.locator('flow-grid-tile-container').count();
 
-    // Construir prompt de Infografía Botánica Dopamínica en Español
-    let fullPrompt = job.image_prompt || '';
-    if (!fullPrompt.includes('INFOGRAFÍA') && !fullPrompt.includes('ESPAÑOL')) {
-      fullPrompt = `[DIRECTIVA: INFOGRAFÍA BOTÁNICA EDUCATIVA EN ESPAÑOL, NANO BANANA 2.1]
-Infografía botánica vertical 3:4 de alto impacto visual y dopamínico para Facebook.
-Tema: "${job.title}" (${job.topic || 'Jardinería Orgánica'}).
-Título principal en negrita en español: "${job.title.toUpperCase()}".
-Diagrama visual y comparativo con llamadas y flechas explicativas con texto 100% en español que aporten gran valor educativo (ej: composición, capas del suelo, raíces, microbios, errores comunes).
-Estética editorial moderna, fondo cálido con textura orgánica, colores vivos y contrastados, hiperrealista, nitidez 8K.
-Sutil marca 'Mr. Green' en la esquina superior. Todos los textos perfectamente legibles en español neutro.`;
-    }
+    // Construir prompt limpio para Infografía Botánica en Español
+    // NUNCA incluir palabras como "NANO BANANA", nombres de modelos o metadatos de directivas técnicas porque el modelo los estampa como texto en la imagen.
+    const cleanTopic = job.topic || 'Jardinería y Botánica Orgánica';
+    const cleanTitle = job.title ? job.title.toUpperCase() : 'GUÍA BOTÁNICA';
+
+    let fullPrompt = `Infografía botánica educativa de alta calidad, formato vertical 3:4.
+Tema: ${cleanTopic}.
+Título principal destacado en español: "${cleanTitle}".
+Subtítulo explicativo en español: Breve resumen práctico de 1 línea sobre el cuidado y la salud de las plantas.
+Contenido visual: Diagrama botánico claro y educativo con ilustraciones hiperrealistas, cortes transversales o comparativas prácticas. Flechas señalizadoras y etiquetas explicativas breves exclusivamente en español (ej: "RAÍCES", "AGUA", "NUTRIENTES", "TIERRA FÉRTIL").
+Prohibido terminantemente incluir palabras técnicas de IA como "Nano Banana", "Prompt", o palabras en inglés.
+Estética editorial botánica moderna, fondo de papel texturizado limpio, colores naturales vivos y contrastados, nitidez fotográfica.
+Marca de agua pequeña en esquina superior: 'Mr. Green'.`;
 
     // Escribir en el input de Flow
     const input = page.locator('.ProseMirror, [contenteditable="true"]').first();

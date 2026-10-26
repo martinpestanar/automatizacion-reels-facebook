@@ -17,9 +17,9 @@ async function regenerateAll() {
     return;
   }
 
-  // Filtrar los que tienen fotos planas de ffmpeg (satelite_vertical) o están sin imagen
-  const targets = jobs.filter(j => !j.image_url || j.image_url.includes('satelite_vertical'));
-  console.log(`Encontrados ${targets.length} trabajos para regenerar con Nano Banana 2.1`);
+  // Tomar los últimos 6 trabajos para regenerar sus imágenes de forma limpia
+  const targets = jobs;
+  console.log(`Encontrados ${targets.length} trabajos para regenerar con infografías limpias (sin texto técnico de IA):`);
 
   for (const job of targets) {
     console.log(`\n========================================`);
