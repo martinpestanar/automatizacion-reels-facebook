@@ -90,19 +90,26 @@ export async function generateNanoBananaInfographic(job, tempDir = 'temp_renders
     // Contar tarjetas antes de generar
     const prevCount = await page.locator('flow-grid-tile-container').count();
 
-    // Construir prompt limpio para Infografía Botánica en Español
-    // NUNCA incluir palabras como "NANO BANANA", nombres de modelos o metadatos de directivas técnicas porque el modelo los estampa como texto en la imagen.
-    const cleanTopic = job.topic || 'Jardinería y Botánica Orgánica';
+    // Línea Gráfica Editorial Oficial de "Mr. Green" para Infografías:
+    // - Paleta botánica: fondo papel kraft pergamino cálido (#F4EBD9 / #EFE6D5), verdes bosque profundos (#1B4332 / #2D6A4F), tonos tierra/marrón orgánico (#4A3525) y acentos dorados/ocre suave.
+    // - Tipografía editorial: títulos limpios y contundentes, sin ruido.
+    // - Estructura visual: Diagrama botánico central con ilustraciones realistas de alta definición, llamadas visuales con flechas finas y recuadros limpios de datos en español.
+    // - Identidad: Sutil logotipo "Mr. Green 🌿" en esquina superior derecha.
+    // - CERO texto técnico: Prohibido poner "Pilar", "Pilar 1", "Pilar 2", "Nano Banana", directivas de prompt o palabras en inglés.
+    const cleanTopic = job.topic || 'Guía Práctica Botánica';
     const cleanTitle = job.title ? job.title.toUpperCase() : 'GUÍA BOTÁNICA';
 
-    let fullPrompt = `Infografía botánica educativa de alta calidad, formato vertical 3:4.
-Tema: ${cleanTopic}.
-Título principal destacado en español: "${cleanTitle}".
-Subtítulo explicativo en español: Breve resumen práctico de 1 línea sobre el cuidado y la salud de las plantas.
-Contenido visual: Diagrama botánico claro y educativo con ilustraciones hiperrealistas, cortes transversales o comparativas prácticas. Flechas señalizadoras y etiquetas explicativas breves exclusivamente en español (ej: "RAÍCES", "AGUA", "NUTRIENTES", "TIERRA FÉRTIL").
-Prohibido terminantemente incluir palabras técnicas de IA como "Nano Banana", "Prompt", o palabras en inglés.
-Estética editorial botánica moderna, fondo de papel texturizado limpio, colores naturales vivos y contrastados, nitidez fotográfica.
-Marca de agua pequeña en esquina superior: 'Mr. Green'.`;
+    let fullPrompt = `Infografía botánica editorial y educativa, formato vertical 3:4.
+LÍNEA GRÁFICA MR. GREEN:
+- Fondo: Papel botánico kraft texturizado cálido y limpio, estilo enciclopedia botánica moderna.
+- Paleta cromática: Verde bosque oscuro (#1B4332), tonos tierra cálidos y blanco puro para textos de alto contraste.
+- Cabecera: Pequeño logotipo 'Mr. Green 🌿' en la esquina superior derecha.
+- Título principal en negrita: "${cleanTitle}".
+- Subtítulo didáctico en español con tipografía limpia: "Guía práctica de cuidado y salud vegetal".
+- Ilustración central: Diagrama botánico explicativo en alta resolución (sección transversal de tierra fértil, raíces hidratadas y microorganismos beneficiosos).
+- Elementos explicativos: 3 viñetas o llamadas con flechas señalizadoras con etiquetas breves 100% en español (ej: "RAÍCES VIVAS", "HUMEDAD EQUILIBRADA", "TIERRA ESPONJOSA").
+- PROHIBICIÓN ESTRICTA: No incluir palabras técnicas como "Pilar", "Pilar 1", "Pilar 2", "Nano Banana", ni etiquetas de sistema. Cero texto en inglés.
+- Estilo: Fotografía botánica macro combinada con diseño editorial infográfico contemporáneo, nitidez 8K, hiperrealista, composición armónica y legible.`;
 
     // Escribir en el input de Flow
     const input = page.locator('.ProseMirror, [contenteditable="true"]').first();

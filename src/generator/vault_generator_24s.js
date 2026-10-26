@@ -127,14 +127,15 @@ DIRECTIVAS VISUALES Y PROMPTS DE VIDEO [VIDEO GENERATION PROMPT]:
 - La imagen debe MOSTRAR EXACTAMENTE LO QUE LA VOZ ESTÁ ENSEÑANDO: Demostración práctica real (ej: dedos apretando tierra para ver si drena, hojas secas cubriendo una raíz, agua penetrando en sustrato esponjoso vs charco en tierra dura).
 - Fotografía macro hiperrealista, colores vivos naturales, cámara lenta cinematográfica suave, textura táctil orgánica.
 
-REGLAS DE INFOGRAFÍA COMPLEMENTARIA (NANO BANANA 2.1):
-- Formato: Infografía botánica vertical 3:4 con alto valor pedagógico visual.
-- Diagrama con flechas, llamadas de texto y comparaciones tipo "Bien vs Mal" o "Paso a paso 1, 2, 3".
-- Todos los textos dentro de la infografía 100% EN ESPAÑOL.
-- Título claro y directo de guía práctica (ej: "3 SEÑALES DE QUE TU TIERRA ESTÁ VIVA").
-- NUNCA incluir en el prompt de la imagen la palabra "Nano Banana" ni términos técnicos del sistema para evitar que el modelo de imagen los imprima como texto en la tarjeta.
-- Sutil marca "Mr. Green" en la esquina.
-- Copy de la imagen con pregunta directa y CTA para guardar la publicación.
+MANUAL DE IDENTIDAD Y LÍNEA GRÁFICA EDITORIAL MR. GREEN (Infografías):
+- Formato: Infografía vertical 3:4 pedagógica de alto valor visual para Facebook Feed.
+- Fondo: Papel botánico kraft texturizado cálido y limpio (#F4EBD9).
+- Paleta: Verde bosque profundo (#1B4332), tonos tierra/marrón orgánico y blanco hueso para máxima legibilidad.
+- Cabecera: Logotipo 'Mr. Green 🌿' sutil en esquina superior derecha.
+- Prohibición Total: NUNCA incluir texto de categorías internas ("Pilar", "Pilar 1", "Pilar 2", "Ángulo A"), ni términos técnicos de IA ("Nano Banana", "Prompt", etc.). Cero texto en inglés.
+- Todo texto visible (título, flechas, llamadas de atención, consejos) DEBE SER 100% EN ESPAÑOL NEUTRO.
+- Diagrama central: Ilustración didáctica o fotografía macro con comparaciones claras ("Paso a paso", "Suelo sano vs Suelo duro").
+- Copy de la imagen: Pregunta interactiva para despertar debate y llamada clara a guardar el post.
 
 ESTRUCTURA EXACTA REQUERIDA EN CADA ESCENA:
 [SCENE SPECIFICATIONS]
