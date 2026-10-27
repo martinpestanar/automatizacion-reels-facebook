@@ -4267,22 +4267,22 @@ export default function App() {
 
       {/* ─── MODAL ESTRATÉGICO: GENERAR CON AGENTE IA (HUERTOS URBANOS & HOOKS) ─── */}
       {isVaultGeneratorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="w-full max-w-xl bg-[var(--bg-card)] border border-[var(--border-color)] rounded-3xl shadow-2xl overflow-hidden p-6">
-            <div className="flex items-center justify-between pb-4 border-b border-[var(--border-color)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden p-6 text-slate-100">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white shadow-md">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-950/50">
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-[var(--text-primary)]">Lanzador Editorial de Ideas (Mr. Green)</h3>
-                  <p className="text-xs text-[var(--text-secondary)]">Personaliza temas y cultivos para generar videos con Hook de 3s</p>
+                  <h3 className="font-bold text-base text-white">Lanzador Editorial de Ideas (Mr. Green)</h3>
+                  <p className="text-xs text-slate-400">Personaliza temas y cultivos para generar videos con Hook de 3s</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsVaultGeneratorOpen(false)}
-                className="p-2 rounded-xl hover:bg-[var(--bg-subtle)] text-[var(--text-secondary)] transition cursor-pointer"
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition cursor-pointer font-bold"
               >
                 ✕
               </button>
@@ -4291,30 +4291,30 @@ export default function App() {
             <div className="py-4 space-y-4">
               {/* Selector de Pilar */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
                   1. Pilar Temático Principal
                 </label>
                 <select
                   value={vaultGenPilar}
                   onChange={(e) => setVaultGenPilar(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] font-medium focus:outline-emerald-500 cursor-pointer"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white font-medium focus:outline-emerald-500 focus:border-emerald-500 cursor-pointer shadow-inner"
                 >
-                  <option value="Pilar 1: Cosechas Reales en Maceta & Balcón (Tomates, Fresas y Limoneros)">
+                  <option value="Pilar 1: Cosechas Reales en Maceta & Balcón (Tomates, Fresas y Limoneros)" className="bg-slate-900 text-white">
                     🌱 Pilar 1: Cosechas Reales en Maceta & Balcón (Tomates, Fresas, Limoneros)
                   </option>
-                  <option value="Pilar 2: Ajustes Técnicos de Riego, Sustrato y Poda para Aficionados Urbanos">
+                  <option value="Pilar 2: Ajustes Técnicos de Riego, Sustrato y Poda para Aficionados Urbanos" className="bg-slate-900 text-white">
                     💧 Pilar 2: Ajustes Técnicos de Riego, Sustrato y Poda
                   </option>
-                  <option value="Pilar 3: Microgreens de Cocina & Cosechas Rápidas en 7 Días">
+                  <option value="Pilar 3: Microgreens de Cocina & Cosechas Rápidas en 7 Días" className="bg-slate-900 text-white">
                     🥗 Pilar 3: Microgreens de Cocina & Cosechas en 7 Días
                   </option>
-                  <option value="Pilar 4: Kokedamas de Aromáticas & Técnicas de Espacio Vertical">
+                  <option value="Pilar 4: Kokedamas de Aromáticas & Técnicas de Espacio Vertical" className="bg-slate-900 text-white">
                     🪴 Pilar 4: Kokedamas de Aromáticas & Huertos Verticales
                   </option>
-                  <option value="Pilar 5: Nutrición Casera y Prevención de Hongos en Terrazas">
+                  <option value="Pilar 5: Nutrición Casera y Prevención de Hongos en Terrazas" className="bg-slate-900 text-white">
                     🛡️ Pilar 5: Nutrición Casera y Prevención de Hongos
                   </option>
-                  <option value="">
+                  <option value="" className="bg-slate-900 text-white">
                     🎲 Equilibrado (Distribución automática entre todos los pilares)
                   </option>
                 </select>
@@ -4323,14 +4323,14 @@ export default function App() {
               {/* Cultivos o Enfoques Específicos */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
                     2. Cultivos / Enfoques a Incluir
                   </label>
-                  <span className="text-[11px] text-emerald-600 font-semibold">
+                  <span className="text-[11px] text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-800/60">
                     {vaultGenCrops.length} seleccionado(s)
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-1.5 p-3 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] max-h-36 overflow-y-auto">
+                <div className="flex flex-wrap gap-1.5 p-3 rounded-2xl bg-slate-850 bg-slate-800/60 border border-slate-700/80 max-h-36 overflow-y-auto shadow-inner">
                   {[
                     'Tomates cherry en maceta',
                     'Fresas en balcón',
@@ -4359,10 +4359,10 @@ export default function App() {
                             setVaultGenCrops([...vaultGenCrops, crop]);
                           }
                         }}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1 ${
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${
                           isSelected
-                            ? 'bg-emerald-600 text-white font-bold shadow-xs'
-                            : 'bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                            ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-950/40'
+                            : 'bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-750 hover:border-slate-600'
                         }`}
                       >
                         {isSelected && '✓'} {crop}
@@ -4387,7 +4387,7 @@ export default function App() {
                         }
                       }
                     }}
-                    className="flex-1 px-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-emerald-500"
+                    className="flex-1 px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-emerald-500 shadow-inner"
                   />
                   <button
                     type="button"
@@ -4397,7 +4397,7 @@ export default function App() {
                         setCustomCropInput('');
                       }
                     }}
-                    className="px-3 py-1.5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] hover:bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-xs font-bold text-emerald-400 cursor-pointer transition shadow-xs"
                   >
                     + Agregar
                   </button>
@@ -4406,7 +4406,7 @@ export default function App() {
 
               {/* Cantidad de cards */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
                   3. Cantidad de Cards a Generar
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -4417,8 +4417,8 @@ export default function App() {
                       onClick={() => setVaultGenCount(num)}
                       className={`py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
                         vaultGenCount === num
-                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
-                          : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                          ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-black shadow-md shadow-emerald-950/40'
+                          : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-750'
                       }`}
                     >
                       {num} Cards {num === 10 ? '🔥 (Recomendado)' : ''}
@@ -4428,17 +4428,17 @@ export default function App() {
               </div>
 
               {/* Recordatorio de Calidad Hook de 3s */}
-              <div className="p-3 rounded-2xl bg-emerald-950/20 border border-emerald-800/40 text-[11px] text-emerald-400">
-                <span className="font-bold">✨ Blindaje Visual Hook (00:00 - 00:03):</span> Todas las cards incluirán un primer plano en macro con acción física inmediata (descubrir frutos ocultos con rocío, corte limpio de tallo, prueba de humedad en sustrato) y texto gancho blanco en mayúsculas sin CTA.
+              <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-800/60 text-xs text-emerald-300 leading-relaxed shadow-sm">
+                <span className="font-bold text-white">✨ Blindaje Visual Hook (00:00 - 00:03):</span> Todas las cards incluirán un primer plano en macro con acción física inmediata (descubrir frutos ocultos con rocío, corte limpio de tallo, prueba de humedad en sustrato) y texto gancho blanco en mayúsculas sin CTA.
               </div>
             </div>
 
             {/* Acciones */}
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-color)]">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
               <button
                 type="button"
                 onClick={() => setIsVaultGeneratorOpen(false)}
-                className="px-4 py-2 rounded-xl border border-[var(--border-color)] hover:bg-[var(--bg-subtle)] text-xs font-bold transition cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer"
               >
                 Cancelar
               </button>
@@ -4468,7 +4468,7 @@ export default function App() {
                     setIsGenerating(false);
                   }
                 }}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs transition shadow-lg shadow-emerald-950/50 cursor-pointer disabled:opacity-50"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 {isGenerating ? 'Generando...' : `Generar ${vaultGenCount} Cards Ahora`}
