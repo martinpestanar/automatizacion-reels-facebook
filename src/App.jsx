@@ -78,6 +78,13 @@ export default function App() {
   const [vaultFilterStatus, setVaultFilterStatus] = useState('all'); // 'all' | 'stored' | 'in_queue'
   const [isImporterOpen, setIsImporterOpen] = useState(false); // Acordeón de importador para mantener la vista limpia
 
+  // Modal de Generación Estratégica con Agente IA en el Vault
+  const [isVaultGeneratorOpen, setIsVaultGeneratorOpen] = useState(false);
+  const [vaultGenPilar, setVaultGenPilar] = useState('Pilar 1: Cosechas Reales en Maceta & Balcón (Tomates, Fresas y Limoneros)');
+  const [vaultGenCrops, setVaultGenCrops] = useState(['Tomates en maceta', 'Fresas en balcón']);
+  const [vaultGenCount, setVaultGenCount] = useState(10);
+  const [customCropInput, setCustomCropInput] = useState('');
+
   // Parámetros de Generación estilo Google Flow (Video & Imagen)
   const [publishingMode, setPublishingMode] = useState(localStorage.getItem('publishingMode') || 'manual'); // 'manual' (revisar antes de publicar) | 'auto' (publicar directo al terminar render)
   const [publishingJobId, setPublishingJobId] = useState(null);
@@ -2071,30 +2078,13 @@ export default function App() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <button
                         type="button"
-                        onClick={async () => {
-                          showToast('🤖 Solicitando al Agente IA lote de 10 cards maestras (24s)...');
-                          setIsGenerating(true);
-                          try {
-                            const res = await fetch('http://localhost:3001/api/vault/generate', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ count: 10 })
-                            });
-                            const data = await res.json();
-                            if (data.error) throw new Error(data.error);
-                            showToast('🎉 ¡Generación de 10 cards iniciada en segundo plano! Aparecerán en segundos...');
-                          } catch (e) {
-                            showToast('Error conectando con el motor: ' + e.message);
-                          } finally {
-                            setIsGenerating(false);
-                          }
-                        }}
+                        onClick={() => setIsVaultGeneratorOpen(true)}
                         disabled={isGenerating}
                         className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-bold cursor-pointer shadow-xs transition disabled:opacity-50"
-                        title="Pide al Agente IA generar 10 nuevas cards botánicas maestras para el Banco"
+                        title="Personaliza pilares y cultivos para que el Agente IA genere cards maestras para el Banco"
                       >
                         <Sparkles className="w-3.5 h-3.5" />
-                        {isGenerating ? 'Generando 10...' : '🤖 Generar 10 con Agente IA'}
+                        {isGenerating ? 'Generando...' : '🤖 Generar con Agente IA'}
                       </button>
 
                       <button
@@ -4271,6 +4261,219 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL ESTRATÉGICO: GENERAR CON AGENTE IA (HUERTOS URBANOS & HOOKS) ─── */}
+      {isVaultGeneratorOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-xl bg-[var(--bg-card)] border border-[var(--border-color)] rounded-3xl shadow-2xl overflow-hidden p-6">
+            <div className="flex items-center justify-between pb-4 border-b border-[var(--border-color)]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white shadow-md">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[var(--text-primary)]">Lanzador Editorial de Ideas (Mr. Green)</h3>
+                  <p className="text-xs text-[var(--text-secondary)]">Personaliza temas y cultivos para generar videos con Hook de 3s</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVaultGeneratorOpen(false)}
+                className="p-2 rounded-xl hover:bg-[var(--bg-subtle)] text-[var(--text-secondary)] transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="py-4 space-y-4">
+              {/* Selector de Pilar */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
+                  1. Pilar Temático Principal
+                </label>
+                <select
+                  value={vaultGenPilar}
+                  onChange={(e) => setVaultGenPilar(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] font-medium focus:outline-emerald-500 cursor-pointer"
+                >
+                  <option value="Pilar 1: Cosechas Reales en Maceta & Balcón (Tomates, Fresas y Limoneros)">
+                    🌱 Pilar 1: Cosechas Reales en Maceta & Balcón (Tomates, Fresas, Limoneros)
+                  </option>
+                  <option value="Pilar 2: Ajustes Técnicos de Riego, Sustrato y Poda para Aficionados Urbanos">
+                    💧 Pilar 2: Ajustes Técnicos de Riego, Sustrato y Poda
+                  </option>
+                  <option value="Pilar 3: Microgreens de Cocina & Cosechas Rápidas en 7 Días">
+                    🥗 Pilar 3: Microgreens de Cocina & Cosechas en 7 Días
+                  </option>
+                  <option value="Pilar 4: Kokedamas de Aromáticas & Técnicas de Espacio Vertical">
+                    🪴 Pilar 4: Kokedamas de Aromáticas & Huertos Verticales
+                  </option>
+                  <option value="Pilar 5: Nutrición Casera y Prevención de Hongos en Terrazas">
+                    🛡️ Pilar 5: Nutrición Casera y Prevención de Hongos
+                  </option>
+                  <option value="">
+                    🎲 Equilibrado (Distribución automática entre todos los pilares)
+                  </option>
+                </select>
+              </div>
+
+              {/* Cultivos o Enfoques Específicos */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    2. Cultivos / Enfoques a Incluir
+                  </label>
+                  <span className="text-[11px] text-emerald-600 font-semibold">
+                    {vaultGenCrops.length} seleccionado(s)
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 p-3 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] max-h-36 overflow-y-auto">
+                  {[
+                    'Tomates cherry en maceta',
+                    'Fresas en balcón',
+                    'Limonero en terraza',
+                    'Papas en bolsa o saco',
+                    'Albahaca en maceta',
+                    'Menta y hierbabuena',
+                    'Romero en kokedama',
+                    'Microgreens de rábano',
+                    'Microgreens de brócoli',
+                    'Lechugas en jardineras',
+                    'Zanahorias en maceta profunda',
+                    'Ajos en maceta',
+                    'Riego por capilaridad casero',
+                    'Tierra aireada y perlita'
+                  ].map((crop) => {
+                    const isSelected = vaultGenCrops.includes(crop);
+                    return (
+                      <button
+                        key={crop}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setVaultGenCrops(vaultGenCrops.filter(c => c !== crop));
+                          } else {
+                            setVaultGenCrops([...vaultGenCrops, crop]);
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1 ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                            : 'bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                        }`}
+                      >
+                        {isSelected && '✓'} {crop}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Input para agregar cultivo personalizado */}
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="text"
+                    placeholder="Escribe otro cultivo (ej: Berenjenas, Pimientos)..."
+                    value={customCropInput}
+                    onChange={(e) => setCustomCropInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (customCropInput.trim() && !vaultGenCrops.includes(customCropInput.trim())) {
+                          setVaultGenCrops([...vaultGenCrops, customCropInput.trim()]);
+                          setCustomCropInput('');
+                        }
+                      }
+                    }}
+                    className="flex-1 px-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (customCropInput.trim() && !vaultGenCrops.includes(customCropInput.trim())) {
+                        setVaultGenCrops([...vaultGenCrops, customCropInput.trim()]);
+                        setCustomCropInput('');
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] hover:bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-primary)] cursor-pointer"
+                  >
+                    + Agregar
+                  </button>
+                </div>
+              </div>
+
+              {/* Cantidad de cards */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-1.5">
+                  3. Cantidad de Cards a Generar
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[3, 5, 10].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setVaultGenCount(num)}
+                      className={`py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${
+                        vaultGenCount === num
+                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                          : 'bg-[var(--bg-surface)] border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      {num} Cards {num === 10 ? '🔥 (Recomendado)' : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recordatorio de Calidad Hook de 3s */}
+              <div className="p-3 rounded-2xl bg-emerald-950/20 border border-emerald-800/40 text-[11px] text-emerald-400">
+                <span className="font-bold">✨ Blindaje Visual Hook (00:00 - 00:03):</span> Todas las cards incluirán un primer plano en macro con acción física inmediata (descubrir frutos ocultos con rocío, corte limpio de tallo, prueba de humedad en sustrato) y texto gancho blanco en mayúsculas sin CTA.
+              </div>
+            </div>
+
+            {/* Acciones */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-color)]">
+              <button
+                type="button"
+                onClick={() => setIsVaultGeneratorOpen(false)}
+                className="px-4 py-2 rounded-xl border border-[var(--border-color)] hover:bg-[var(--bg-subtle)] text-xs font-bold transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isGenerating}
+                onClick={async () => {
+                  setIsVaultGeneratorOpen(false);
+                  showToast(`🤖 Solicitando al Agente IA lote de ${vaultGenCount} cards con foco en tus cultivos...`);
+                  setIsGenerating(true);
+                  try {
+                    const res = await fetch('http://localhost:3001/api/vault/generate', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        count: vaultGenCount,
+                        pilar: vaultGenPilar || null,
+                        focusCrops: vaultGenCrops
+                      })
+                    });
+                    const data = await res.json();
+                    if (data.error) throw new Error(data.error);
+                    showToast(`🎉 ¡Generación de ${vaultGenCount} cards iniciada! Aparecerán en tu Banco en unos momentos...`);
+                  } catch (e) {
+                    showToast('Error conectando con el motor: ' + e.message);
+                  } finally {
+                    setIsGenerating(false);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                {isGenerating ? 'Generando...' : `Generar ${vaultGenCount} Cards Ahora`}
+              </button>
+            </div>
           </div>
         </div>
       )}
