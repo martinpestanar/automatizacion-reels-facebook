@@ -90,26 +90,45 @@ async function openFlowAndConfigure(context, settings, report) {
   await page.goto('https://flow.google.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(3500);
 
+  // Verificación temprana de sesión activa
+  const currentUrl = page.url();
+  if (currentUrl.includes('/about') || currentUrl.includes('accounts.google.com')) {
+    const errorMsg = `Sesión de Google no iniciada o expirada (URL: ${currentUrl}). Se requiere re-autenticación.`;
+    console.error(`🚨 ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
+
   // 1. Abrir proyecto existente o crear nuevo
   console.log('📂 Buscando proyecto en Google Flow...');
-  const projectLocator = page.locator('a.project-thumbnail-container, a[aria-label*="proyecto" i], a[aria-label*="project" i], div.project-card, .project-tile').first();
-  const hasProject = await projectLocator.isVisible({ timeout: 6000 }).catch(() => false);
+  let insideWorkspace = page.url().includes('/project/');
 
-  if (hasProject) {
-    console.log('Abriendo proyecto existente...');
-    await projectLocator.click();
-  } else {
-    console.log('Creando nuevo proyecto en Google Flow...');
-    const newBtn = page.locator('button.new-project-button, button:has-text("Nuevo proyecto"), button:has-text("New project"), button:has-text("Crear"), button:has-text("Create"), a:has-text("New project")').first();
-    if (await newBtn.isVisible({ timeout: 8000 }).catch(() => false)) {
-      await newBtn.click();
+  if (!insideWorkspace) {
+    // Buscar primero el botón explícito de "Nuevo proyecto" o "Try Omni now" en la página principal
+    const nuevoBtn = page.locator('div:has-text("Nuevo proyecto"), button:has-text("Nuevo proyecto"), [role="button"]:has-text("Nuevo proyecto")').last();
+    const tryOmni = page.locator('button:has-text("Try Omni now"), a:has-text("Try Omni now")').first();
+
+    if (await nuevoBtn.isVisible({ timeout: 2500 }).catch(() => false)) {
+      console.log('Haciendo clic en Nuevo proyecto...');
+      await nuevoBtn.click({ force: true });
+    } else if (await tryOmni.isVisible({ timeout: 1500 }).catch(() => false)) {
+      console.log('Haciendo clic en Try Omni now...');
+      await tryOmni.click({ force: true });
     } else {
-      console.log('Navegando directamente a nuevo proyecto Flow...');
-      await page.goto('https://flow.google.com/project/new', { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+      const projectLocator = page.locator('a.project-thumbnail-container, a[aria-label*="proyecto" i], a[aria-label*="project" i], div.project-card, .project-tile').first();
+      if (await projectLocator.isVisible({ timeout: 2000 }).catch(() => false)) {
+        console.log('Abriendo proyecto existente...');
+        await projectLocator.click();
+      }
     }
   }
 
-  await page.waitForTimeout(4000);
+  // Esperar a que la URL entre a un /project/
+  for (let waitUrl = 0; waitUrl < 8; waitUrl++) {
+    if (page.url().includes('/project/')) break;
+    await page.waitForTimeout(1000);
+  }
+
+  await page.waitForTimeout(3000);
   console.log('URL de área de trabajo activa:', page.url());
 
   // 2. Limpiar banners y backdrops
@@ -128,7 +147,17 @@ async function openFlowAndConfigure(context, settings, report) {
     console.warn('Aviso limpiando backdrops y banners:', e.message);
   }
 
-  // 3. Cerrar panel de agente si está abierto
+  // 3. Cerrar panel de visor modal o agente si está abierto antes de empezar
+  try {
+    // Si la URL actual es /project/ pero hay un modal interno del visor de video abierto (ej: botón con mat-icon de close)
+    const modalCloseBtn = page.locator('flow-media-viewer button:has(mat-icon:has-text("close")), .media-viewer-container button:has(mat-icon:has-text("close"))').first();
+    if (await modalCloseBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+      console.log('🔙 Cerrando visor de video modal interno...');
+      await modalCloseBtn.click({ force: true });
+      await page.waitForTimeout(1000);
+    }
+  } catch (_) {}
+
   try {
     const closeAgentPanel = page.locator('button.header-action:has-text("close"), button[aria-label="Cerrar"], button[aria-label="Close"]').first();
     if (await closeAgentPanel.isVisible({ timeout: 1500 }).catch(() => false)) {
@@ -155,42 +184,76 @@ async function openFlowAndConfigure(context, settings, report) {
     }
   }
 
+  // 4.1. Asegurar filtro activo en 'Videos' para no confundir imágenes con videos
+  try {
+    const videosFilterBtn = page.locator('button:has-text("Videos"), button:has-text("Vídeos")').first();
+    if (await videosFilterBtn.isVisible({ timeout: 2000 })) {
+      await videosFilterBtn.click();
+      await page.waitForTimeout(1000);
+      console.log('🎬 Filtro de vista establecido en "Videos" en Google Flow');
+    }
+  } catch (_) {}
+
   // 5. Configurar parámetros de Google Flow
   console.log('📐 Configurando parámetros de video...', settings);
   report('configuring', 12, `Aplicando modelo ${settings.modelName || 'Omni 1.1 Flash'}...`);
 
-  const trigger = page.locator('button.settings-trigger-button').first();
-  await trigger.waitFor({ state: 'visible', timeout: 15000 });
+  const trigger = page.locator('button.settings-trigger-button, button[aria-label="Settings trigger"], button[aria-label*="configuraci" i], button[aria-label*="ajustes" i]').first();
+  try {
+    await trigger.waitFor({ state: 'visible', timeout: 15000 });
+  } catch (waitForErr) {
+    const fallbackUrl = page.url();
+    if (fallbackUrl.includes('/about') || fallbackUrl.includes('accounts.google.com')) {
+      throw new Error(`Sesión expirada detectada al configurar parámetros (URL: ${fallbackUrl})`);
+    }
+    // Captura de pantalla de diagnóstico para inspección inmediata
+    try {
+      await page.screenshot({ path: `debug_settings_timeout_${Date.now()}.png` });
+    } catch (_) {}
+    throw waitForErr;
+  }
   await trigger.click();
   await page.waitForTimeout(1000);
+
+  // Función auxiliar robusta para hacer click en mat-button-toggle (apuntando a su button interno)
+  const clickToggle = async (locator) => {
+    if (await locator.isVisible({ timeout: 1500 }).catch(() => false)) {
+      const innerBtn = locator.locator('button').first();
+      if (await innerBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+        await innerBtn.click({ force: true });
+      } else {
+        await locator.click({ force: true });
+      }
+    }
+  };
 
   // Modo Vídeo / Imagen
   if (settings.mediaType === 'image') {
     const imgToggle = page.locator('mat-button-toggle:has-text("Imagen"), mat-button-toggle:has-text("Image")').first();
-    if (await imgToggle.isVisible()) await imgToggle.click();
+    await clickToggle(imgToggle);
   } else {
     const videoToggle = page.locator('mat-button-toggle:has-text("Vídeo"), mat-button-toggle:has-text("Video")').first();
-    if (await videoToggle.isVisible()) await videoToggle.click();
+    await clickToggle(videoToggle);
   }
   await page.waitForTimeout(500);
 
   // Tipo de vídeo
   if (settings.generationMode === 'frames') {
     const framesToggle = page.locator('mat-button-toggle:has-text("Fotogramas"), mat-button-toggle:has-text("Frames")').first();
-    if (await framesToggle.isVisible()) await framesToggle.click();
+    await clickToggle(framesToggle);
   } else {
     const ingToggle = page.locator('mat-button-toggle:has-text("Ingredientes"), mat-button-toggle:has-text("Ingredients")').first();
-    if (await ingToggle.isVisible()) await ingToggle.click();
+    await clickToggle(ingToggle);
   }
   await page.waitForTimeout(500);
 
   // Relación de aspecto
   if (settings.aspectRatio === '16:9') {
     const toggle169 = page.locator('mat-button-toggle:has-text("16:9"), mat-button-toggle:has-text("crop_16_9")').first();
-    if (await toggle169.isVisible()) await toggle169.click();
+    await clickToggle(toggle169);
   } else {
     const toggle916 = page.locator('mat-button-toggle:has-text("9:16"), mat-button-toggle:has-text("crop_9_16")').first();
-    if (await toggle916.isVisible()) await toggle916.click();
+    await clickToggle(toggle916);
   }
   await page.waitForTimeout(500);
 
@@ -258,6 +321,20 @@ async function openFlowAndConfigure(context, settings, report) {
   const triggerText = await trigger.innerText().catch(() => '');
   console.log('✅ Parámetros Flow activados:', triggerText.replace(/\n/g, ' '));
 
+  // Blindaje absoluto: Si el botón de settings sigue diciendo 'Nano Banana' o no incluye 'Vídeo', forzar cambio
+  if (triggerText.includes('Banana') || (!triggerText.includes('Vídeo') && !triggerText.includes('Video'))) {
+    console.warn('⚠️ Flow no conmutó a Vídeo en el primer intento. Forzando conmutación a modo Video...');
+    await trigger.click();
+    await page.waitForTimeout(800);
+    const videoToggle = page.locator('mat-button-toggle:has-text("Vídeo"), mat-button-toggle:has-text("Video")').first();
+    await clickToggle(videoToggle);
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(800);
+    const retryTriggerText = await trigger.innerText().catch(() => '');
+    console.log('✅ Parámetros Flow re-verificados:', retryTriggerText.replace(/\n/g, ' '));
+  }
+
   return page;
 }
 
@@ -273,6 +350,26 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
   // Contar tiles antes de enviar el prompt
   const prevTilesCount = await page.locator('flow-video-tile, flow-grid-tile-container').count();
 
+  // Validación estricta anti-alucinación: verificar que el prompt no esté vacío ni sea solo una plantilla
+  let cleanVisualPrompt = (sc.prompt || '').trim();
+  const marker = '[VIDEO GENERATION PROMPT]';
+  let hasActualVisualContent = false;
+
+  if (cleanVisualPrompt.includes(marker)) {
+    const afterMarker = cleanVisualPrompt.split(marker)[1]?.trim();
+    if (afterMarker && afterMarker.length > 20) {
+      hasActualVisualContent = true;
+    }
+  } else if (cleanVisualPrompt.length > 50) {
+    hasActualVisualContent = true;
+  }
+
+  if (!hasActualVisualContent) {
+    const errPrompt = `Prompt de Escena ${sc.num} inválido o sin descripción visual real [VIDEO GENERATION PROMPT]. Cancelando para evitar renders abstractos o erróneos.`;
+    console.error(`🚨 ${errPrompt}`);
+    throw new Error(errPrompt);
+  }
+
   // Asegurar que el prompt enviado a Google Flow indique explícitamente idioma español
   let finalPrompt = sc.prompt || '';
   if (!finalPrompt.includes('IDIOMA') && !finalPrompt.includes('ESPAÑOL')) {
@@ -281,6 +378,13 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
 
   const input = page.locator('.ProseMirror, [contenteditable="true"]').first();
   await input.waitFor({ state: 'visible', timeout: 20000 });
+
+  // 🛡️ SENSOR VISUAL PREVIO: Verificar si Google Flow ya muestra banner de créditos agotados
+  const preCheckBanner = await page.locator('body').innerText().catch(() => '');
+  if (preCheckBanner.includes('Te has quedado sin puntos') || preCheckBanner.includes('sin puntos de Google Flow') || preCheckBanner.includes('out of credits')) {
+    throw new Error(`[CRÉDITOS AGOTADOS DETECTADO POR SENSOR VISUAL] Cuenta sin puntos de Google Flow antes de enviar Escena ${sc.num}.`);
+  }
+
   await input.click({ force: true });
   await page.keyboard.press('Control+A');
   await page.keyboard.press('Backspace');
@@ -293,6 +397,12 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
   // Intentar enviar hasta 3 veces; esperar hasta 60 s para que aparezca un nuevo tile
   let newTileAppeared = false;
   for (let sendAttempt = 0; sendAttempt < 3; sendAttempt++) {
+    // Sensor rápido de créditos durante el envío
+    const midCheckBanner = await page.locator('body').innerText().catch(() => '');
+    if (midCheckBanner.includes('Te has quedado sin puntos') || midCheckBanner.includes('sin puntos de Google Flow')) {
+      throw new Error(`[CRÉDITOS AGOTADOS DETECTADO POR SENSOR VISUAL] Google Flow bloqueó el envío de Escena ${sc.num}.`);
+    }
+
     const submitBtn = page.locator('button:has(mat-icon:has-text("arrow_forward")), button.generate-icon-button, button[aria-label*="generación" i], button[aria-label*="generate" i], button:has-text("arrow_forward")').first();
     if (await submitBtn.isVisible() && !(await submitBtn.isDisabled())) {
       await submitBtn.click({ force: true });
@@ -304,6 +414,13 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
     // Esperar hasta TILE_APPEAR_ATTEMPTS × TILE_APPEAR_INTERVAL que aparezca el nuevo tile
     for (let waitCount = 0; waitCount < TILE_APPEAR_ATTEMPTS; waitCount++) {
       await page.waitForTimeout(TILE_APPEAR_INTERVAL);
+
+      // Chequeo proactivo de banner en cada vuelta de espera
+      const pollText = await page.locator('body').innerText().catch(() => '');
+      if (pollText.includes('Te has quedado sin puntos') || pollText.includes('sin puntos de Google Flow')) {
+        throw new Error(`[CRÉDITOS AGOTADOS DETECTADO POR SENSOR VISUAL] Banner apareció mientras esperaba tarjeta de Escena ${sc.num}.`);
+      }
+
       const currentCount = await page.locator('flow-video-tile, flow-grid-tile-container').count();
       if (currentCount > prevTilesCount) {
         console.log(`🆕 Nueva tarjeta de Escena ${sc.num} creada (Total: ${currentCount}, Anterior: ${prevTilesCount})`);
@@ -379,20 +496,31 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
   await dlBtn.click({ force: true });
   await page.waitForTimeout(1000);
 
-  const opt720 = page.locator('.cdk-overlay-container button:has-text("720p"), .cdk-overlay-container [role="menuitem"]:has-text("720p"), button[role="menuitem"]:has-text("720p")').first();
-  await opt720.waitFor({ state: 'visible', timeout: 15000 });
+  // Seleccionar la opción de descarga: Para VIDEO apuntar con selector estricto de filtro a '720p' para obtener el archivo .mp4 nativo con audio AAC
+  const downloadOption = page.locator('.cdk-overlay-container [role="menuitem"]').filter({ hasText: '720p' }).first();
+  await downloadOption.waitFor({ state: 'visible', timeout: 15000 });
 
   const clipPath = path.join(tempDir, `clip_${job.id}_s${sc.num}.mp4`);
   console.log(`📥 Descargando Escena ${sc.num}...`);
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: DOWNLOAD_TIMEOUT }),
-    opt720.click({ force: true })
+    downloadOption.click({ force: true })
   ]);
   await download.saveAs(clipPath);
 
-  // Cerrar cualquier menú residual abierto
+  // Cerrar cualquier menú residual y salir del visor modal de la escena para volver al grid
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(1000);
+
+  // Asegurar que seguimos en el proyecto; si volvimos a la raíz o se cerró, volver a entrar al proyecto
+  if (!page.url().includes('/project/')) {
+    console.log('🔙 Se detectó salida del proyecto tras descargar. Reingresando al proyecto más reciente...');
+    const recentProject = page.locator('a.project-thumbnail-container, div.project-card, .project-tile').first();
+    if (await recentProject.isVisible({ timeout: 4000 }).catch(() => false)) {
+      await recentProject.click({ force: true });
+      await page.waitForTimeout(3000);
+    }
+  }
 
   // Verificación de integridad MD5
   const clipBuffer = fs.readFileSync(clipPath);
@@ -418,10 +546,10 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
       await freshDl.click();
       await page.waitForTimeout(1000);
 
-      const freshOpt = page.locator('.cdk-overlay-container button[role="menuitem"]:has-text("720p"), button[role="menuitem"]:has-text("720p")').first();
+      const freshOpt = page.locator('.cdk-overlay-container [role="menuitem"]').filter({ hasText: '720p' }).first();
       const [retryDl] = await Promise.all([
         page.waitForEvent('download', { timeout: DOWNLOAD_TIMEOUT }),
-        freshOpt.click()
+        freshOpt.click({ force: true })
       ]);
       await retryDl.saveAs(clipPath);
 
@@ -528,9 +656,24 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
           });
         }
         if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 0) {
-          console.log(`✅ [Checkpoint] Escena ${sc.num} reutilizada desde Supabase Storage.`);
-          downloadedClips.push(clipPath);
-          clipsBySceneNum[sc.num] = clipPath;
+          // Validar que el archivo descargado sea un video MP4 real con audio y no una imagen/GIF
+          let isValidVideo = false;
+          try {
+            const probe = execSync(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 "${clipPath}"`, { encoding: 'utf8', timeout: 4000 }).trim();
+            if (probe === 'h264' || probe === 'hevc' || probe === 'vp9') {
+              isValidVideo = true;
+            }
+          } catch (_) {}
+
+          if (isValidVideo) {
+            console.log(`✅ [Checkpoint] Escena ${sc.num} válida (H.264) reutilizada desde Supabase Storage.`);
+            downloadedClips.push(clipPath);
+            clipsBySceneNum[sc.num] = clipPath;
+          } else {
+            console.warn(`⚠️ [Checkpoint] Escena ${sc.num} en Storage no es un video MP4 válido (detectado imagen o corrupto). Se eliminará para re-renderizar.`);
+            fs.unlinkSync(clipPath);
+            scenesToProcess.push(sc);
+          }
         } else {
           console.warn(`⚠️ [Checkpoint] Escena ${sc.num} no se pudo descargar, se re-renderizará.`);
           scenesToProcess.push(sc);
@@ -601,12 +744,14 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
         } catch (sceneErr) {
           const errMsg = sceneErr.message || '';
 
-          // ─── Detectar si es problema de créditos agotados ──────────────────
+          // ─── Detectar si es problema de créditos agotados o timeout por tarjeta no creada ─
           const isCreditError = (
             errMsg.toLowerCase().includes('créditos') ||
             errMsg.toLowerCase().includes('credits') ||
+            errMsg.toLowerCase().includes('sin puntos') ||
             errMsg.toLowerCase().includes('no inició la generación') ||
-            errMsg.toLowerCase().includes('nueva tarjeta en galería')
+            errMsg.toLowerCase().includes('nueva tarjeta en galería') ||
+            errMsg.toLowerCase().includes('timeout: escena')
           );
 
           if (isCreditError) {
@@ -734,6 +879,28 @@ export async function executeFlowRender(jobId = null, mode = 'full_video_3_scene
   } catch (err) {
     console.error('❌ Error durante render en Google Flow:', err);
     report('error', 0, err.message || 'Error en Google Flow');
+
+    // Capturar pantalla de diagnóstico en fallo general si el contexto sigue abierto
+    try {
+      if (context && context.pages().length > 0) {
+        const errorScreenshotPath = path.resolve(`error_render_${job?.id || 'job'}.png`);
+        await context.pages()[0].screenshot({ path: errorScreenshotPath, fullPage: true });
+        console.log(`📸 Screenshot de error guardada en: ${errorScreenshotPath}`);
+      }
+    } catch (ssErr) {
+      console.warn('No se pudo tomar screenshot de error:', ssErr.message);
+    }
+
+    // Si el error fue por sesión deslogueada, marcar la cuenta como 'error' en google_accounts inmediatamente
+    if (selectedAccount && (err.message?.includes('Sesión de Google no iniciada') || err.message?.includes('Sesión expirada'))) {
+      try {
+        await supabase.from('google_accounts').update({
+          status: 'error',
+          notes: `Sesión cerrada: ${err.message}`
+        }).eq('id', selectedAccount.id);
+        console.warn(`🚨 Cuenta ${selectedAccount.alias} marcada como 'error' para que el rotador la ignore.`);
+      } catch (_) {}
+    }
 
     // Incrementar retry_count. Si llega a 3, marcar error definitivo para no volver a intentar
     let retryCount = 1;

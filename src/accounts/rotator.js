@@ -16,26 +16,26 @@ async function autoReset24hRollingWindow(accounts) {
   const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
   for (const acc of accounts) {
-    if (acc.tier === 'pro') continue; // Cuenta Pro tiene cupo mensual / 1000
-
     // Si la cuenta tiene créditos gastados o está marcada exhausted
     if (acc.daily_credits_used > 0 || acc.status === 'exhausted') {
       const referenceTime = acc.last_reset_at ? new Date(acc.last_reset_at).getTime() : (acc.last_used_at ? new Date(acc.last_used_at).getTime() : 0);
       const elapsed = now - referenceTime;
 
+      // Para cuentas Pro o Free: si pasaron 24h desde que se bloqueó/agotó, volver a resetear
       if (elapsed >= TWENTY_FOUR_HOURS_MS) {
-        console.log(`⏰ [Rolling 24h Reset] Han pasado ${Math.round(elapsed / (1000 * 60 * 60))}h para ${acc.alias} (${acc.email}). Reponiendo 50 créditos...`);
+        console.log(`⏰ [Rolling 24h Reset] Han pasado ${Math.round(elapsed / (1000 * 60 * 60))}h para ${acc.alias} (${acc.email}). Reponiendo créditos...`);
         await supabase
           .from('google_accounts')
           .update({
             daily_credits_used: 0,
             status: 'active',
-            last_reset_at: new Date().toISOString()
+            last_reset_at: null
           })
           .eq('id', acc.id);
         
         acc.daily_credits_used = 0;
         acc.status = 'active';
+        acc.last_reset_at = null;
       }
     }
   }
@@ -115,8 +115,8 @@ export async function recordAccountUsage(accountId, creditsCost = 1) {
     last_used_at: new Date().toISOString()
   };
 
-  // Si estaba en 0 y comienza a gastar, fijar el inicio de la ventana de 24 horas
-  if (account.daily_credits_used === 0) {
+  // Si estaba en 0 y comienza a gastar (o no tiene fecha de inicio), fijar el inicio de la ventana rodante de 24 horas
+  if (account.daily_credits_used === 0 || !account.last_reset_at) {
     updates.last_reset_at = new Date().toISOString();
   }
 

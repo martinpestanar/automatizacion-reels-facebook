@@ -6,25 +6,25 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 const GEMINI_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
 const PILARES = [
-  'Pilar 1: Micro-Ecosistemas & Suelo Vivo',
-  'Pilar 2: Botánica Rebelde & Chaos Gardening',
-  'Pilar 3: Ciencia Orgánica Sin Mitos',
-  'Pilar 4: Micro-Bosques & Foodscaping Urbano',
-  'Pilar 5: Jardines Sensoriales & Nocturnos'
+  'Pilar 1: Cosechas Reales en Maceta & Balcón (Tomates, Fresas y Limoneros)',
+  'Pilar 2: Ajustes Técnicos de Riego, Sustrato y Poda para Aficionados Urbanos',
+  'Pilar 3: Microgreens de Cocina & Cosechas Rápidas en 7 Días',
+  'Pilar 4: Kokedamas de Aromáticas & Técnicas de Espacio Vertical',
+  'Pilar 5: Nutrición Casera y Prevención de Hongos en Terrazas'
 ];
 
 const ANGULOS = [
-  'A) Secreto Oculto',
-  'B) Contraste / Comparación',
-  'C) Mito Desmentido',
-  'D) Técnica Paso a Paso',
-  'E) Nocturno / Sensorial'
+  'A) Demostración Práctica Real',
+  'B) El Ajuste que Duplica la Cosecha',
+  'C) Error Común en Maceta Resuelto',
+  'D) Técnica Paso a Paso sin Complicaciones',
+  'E) Del Balcón a la Mesa (Uso Directo)'
 ];
 
 const LUCES = [
-  'L1: Amanecer Dorado',
-  'L2: Lluvia de Verano',
-  'L3: Luz de Ventana / Invernadero'
+  'L1: Luz Natural Suave de Mañana (Terraza/Balcón)',
+  'L2: Luz de Ventana de Cocina para Microgreens',
+  'L3: Luz Dorada de Tarde en Balcón Urbano'
 ];
 
 /**
@@ -67,9 +67,15 @@ async function callGemini(systemInstruction, userPrompt) {
 /**
  * Genera un lote de cards de contenido ultra-realistas (24s / 3 escenas)
  * usando la API Gratuita de Google Gemini.
+ * Soporta personalización temática de Pilares y Enfoques de Cultivos.
  */
-export async function generateVaultBatch(targetCount = 10) {
-  console.log(`\n🌱 [VaultGenerator: Google Gemini Gratis] Iniciando generación de ${targetCount} cards maestras para Mr. Green...`);
+export async function generateVaultBatch(targetCount = 10, options = {}) {
+  const selectedPilar = options.pilar || null;
+  const focusCrops = Array.isArray(options.focusCrops) && options.focusCrops.length > 0 ? options.focusCrops : null;
+
+  console.log(`\n🌱 [VaultGenerator: Google Gemini] Iniciando generación de ${targetCount} cards maestras para Mr. Green...`);
+  if (selectedPilar) console.log(`📌 Pilar seleccionado: "${selectedPilar}"`);
+  if (focusCrops) console.log(`🥦 Cultivos / Temas específicos: [${focusCrops.join(', ')}]`);
 
   // 1. Obtener títulos existentes en video_jobs y content_vault para no repetir
   const { data: existingJobs } = await supabase.from('video_jobs').select('title');
@@ -82,16 +88,19 @@ export async function generateVaultBatch(targetCount = 10) {
 
   console.log(`📋 [VaultGenerator] Temas excluidos (ya realizados): ${blacklist.length} títulos.`);
 
-  // 2. Construir la matriz equilibrada (2 por pilar para 10 cards)
+  // 2. Construir la distribución de pilares y ángulos
   const distribution = [];
   for (let i = 0; i < targetCount; i++) {
-    const pilarIndex = i % PILARES.length;
+    const pilar = selectedPilar || PILARES[i % PILARES.length];
     const anguloIndex = i % ANGULOS.length;
     const luzIndex = i % LUCES.length;
+    const cropHint = focusCrops ? focusCrops[i % focusCrops.length] : null;
+
     distribution.push({
-      pilar: PILARES[pilarIndex],
+      pilar,
       angulo: ANGULOS[anguloIndex],
-      luz: LUCES[luzIndex]
+      luz: LUCES[luzIndex],
+      cropHint
     });
   }
 
@@ -99,60 +108,85 @@ export async function generateVaultBatch(targetCount = 10) {
 
   for (let i = 0; i < distribution.length; i++) {
     const item = distribution[i];
-    console.log(`\n✍️ Generando Card ${i + 1}/${targetCount} con Gemini -> [${item.pilar}] (${item.angulo})...`);
+    console.log(`\n✍️ Generando Card ${i + 1}/${targetCount} con Gemini -> [${item.pilar}] (${item.angulo})${item.cropHint ? ` [Enfoque: ${item.cropHint}]` : ''}...`);
+
+    const cropDirective = item.cropHint
+      ? `\n- CULTIVO O ENFOQUE PRIORITARIO OBLIGATORIO: Esta card debe estar enfocada exclusivamente en: "${item.cropHint}".`
+      : (focusCrops ? `\n- CULTIVOS PRIORITARIOS: Enfocar la card en uno de los siguientes: ${focusCrops.join(', ')}.` : '');
 
     const systemInstruction = `
-Eres el Director de Contenido Educativo y Divulgación Botánica de "Mr. Green".
-Tu misión es crear videos de 24 segundos exactos (3 escenas de 8.0s) que ENSEÑEN algo de verdadero valor, práctico y sorprendente, EXPLICADO DE FORMA TAN SENCILLA Y CLARA QUE UN NIÑO DE 11 AÑOS LO ENTIENDA AL INSTANTE, pero fascinante para cualquier adulto aficionado a las plantas o al huerto.
+Eres el Director de Contenido Educativo y Divulgación de Huertos Urbanos y Jardinería de "Mr. Green".
+Tu misión es crear videos de 24 segundos exactos (3 escenas de 8.0s) pensados para aficionados a los huertos en casa, balcones, terrazas y pequeños espacios.
+El contenido debe ser 100% REALISTA (cosechas viables en maceta, variedades de tomates, fresas, limoneros, papas en saco o bolsa, lechugas, albahaca, microgreens en cocina o kokedamas de aromáticas), con alta atracción visual pero sin fantasías ni promesas irreales.
+TODO EL CONTENIDO Y TEXTOS DEBEN ESTAR EN ESPAÑOL NEUTRO.
 
 PARÁMETROS ASIGNADOS:
 - Pilar: ${item.pilar}
 - Ángulo: ${item.angulo}
-- Clima y Luz: ${item.luz}
+- Clima y Luz: ${item.luz}${cropDirective}
 
-REGLA DE ORO DE CONTENIDO (FÓRMULA EDUCATIVA DE 3 ESCENAS - VALOR REAL):
-Cada video DEBE tener una lección clara, útil y práctica siguiendo este arco:
-- ESCENA 1 (EL ERROR O LA PREGUNTA CURIOSA): Atrapa la atención revelando un error muy común que la gente comete en sus plantas o una pregunta fascinante que nadie sabe responder.
-- ESCENA 2 (LA EXPLICACIÓN CIENTÍFICA PARA UN NIÑO DE 11 AÑOS): Explica de forma visual y con analogías sencillas qué pasa por dentro (en las raíces, en la tierra, en el agua, con los bichitos buenos). Cero tecnicismos aburridos; usa comparaciones visuales cotidianas (ej: "las raíces respiran como nosotros", "las hojas actúan como una sombrilla").
-- ESCENA 3 (EL CONSEJO PRÁCTICO ACCIONABLE): Da el tip exacto que el espectador puede hacer hoy mismo en su casa o maceta en menos de 1 minuto, cerrando con una invitación a guardar o comentar.
+ARQUITECTURA DE RETENCIÓN DE 3 ESCENAS (MÁXIMO GANCHO VISUAL):
+- ESCENA 1 (EL VISUAL HOOK DE LOS PRIMEROS 3 SEGUNDOS - CRÍTICO):
+  * REGLA ESTRICTA DE 00:00 a 00:03: PROHIBIDO planos estáticos o introducciones lentas. Debe iniciar con una ACCIÓN VISUAL INMEDIATA EN MACRO que atrape la vista al instante:
+    - Unos dedos apartando hojas verdes para revelar un racimo brillante de frutos ocultos con rocío.
+    - O una tijera cortando con precisión el tallo de una fruta madura o brote crujiente.
+    - O una mano hundiendo un dedo en la tierra para comprobar si el sustrato está engañando con la humedad.
+  * Texto gancho en pantalla (Time: 00:00.2 a 00:02.8) corto, de alto impacto y en mayúsculas (ej: "EL ERROR QUE SECA TUS TOMATES", "COSECHA PAPAS EN TU BALCÓN", "NO TIRES ESTA RAMA DE MENTA").
+- ESCENA 2 (LA DEMOSTRACIÓN TÉCNICA VISUAL): Explica qué hacer exactamente con las manos (drenaje, corte de chupones axilares, técnica de riego por abajo, ventilación). Simple, didáctico y reproducible por cualquier persona en su hogar.
+- ESCENA 3 (EL CONSEJO FINAL DE UTILIDAD): Remata con el truco botánico definitivo que garantiza el éxito.
+IMPORTANTE: CERO LLAMADOS A LA ACCIÓN (NO CTA, NO digas "comenta", "guarda", "sígueme" ni "dale like"). Termina el video entregando puro valor y conocimiento práctico.
+
+DIRECTIVAS ESTRICTAS DE TEXTOS VISUALES EN PANTALLA [ON-SCREEN TEXT]:
+- El ÚNICO texto que puede salir en pantalla es el GANCHO INICIAL en la Escena 1 (Time: 00:00.2 a 00:02.8).
+- NUNCA pongas especificaciones de cámara ni tecnicismos ("f/2.1", "85mm", "ISO", etc.).
+- El texto debe ser exclusivamente una frase gancho atractiva en ESPAÑOL.
+- En las Escenas 2 y 3: NINGÚN texto en pantalla (None).
+
+DIRECTIVAS ESTRICTAS DE SONIDO Y AUDIO [AUDIO & SOUND DESIGN] - PURIFICACIÓN ACÚSTICA:
+- PROHIBIDO el uso de swooshes metálicos, zumbidos sintéticos, sweeps electrónicos de IA, campanillas digitales o efectos sci-fi.
+- SFX de acción y ambiente 100% ORGÁNICOS Y NATURALES: susurro de viento suave entre hojas, canto sutil de pájaros de fondo, goteo de agua o regadera, sonido táctil de tijeras de podar al cortar un tallo verde, crujido suave de tierra húmeda.
+- Música de fondo: guitarra acústica cálida de cuerdas de nylon o madera suave, volumen muy bajo para priorizar la voz limpia y natural del mentor.
 
 DIRECTIVAS ESTRICTAS DE IDIOMA Y VOZ EN OFF [VOICE SCRIPT]:
-- IDIOMA: 100% ESPAÑOL NEUTRO. Queda TERMINANTEMENTE PROHIBIDO cualquier palabra en inglés en la voz y en los textos.
-- LOCUCIÓN ESTILO DOCUMENTAL BBC EARTH MODERNO Y ENVOLVENTE (David Attenborough dinámico en español): Narrador naturalista experto, tono barítono profundo, sabio y magnético, pero con RITMO ÁGIL, FLUIDO Y CAUTIVADOR (nada lento ni aburrido). Narra con energía viva y fascinación contagiosa para atrapar la atención desde el primer segundo.
-- RITMO Y PALABRAS POR ESCENA: De 14 a 18 palabras por escena (unos 6.0 a 6.8 segundos de locución continua y fluida a 130-135 wpm, dejando solo 1 a 1.2 segundos al final para el remate del efecto sonoro). Cero pausas largas o silencios muertos que hagan el video pesado.
-- Cada frase debe enseñar un hecho real o consejo concreto, con esa magia y sabiduría documental clásica de la BBC.
+- IDIOMA: 100% ESPAÑOL NEUTRO. Prohibido usar palabras o términos en inglés.
+- LOCUCIÓN: Cercana, didáctica y clara. Habla de tú a tú al aficionado urbano. Ritmo ágil y fluido (130-135 wpm).
+- RITMO: De 14 a 18 palabras por escena.
+- CIERRE DE GUION: Terminar siempre con un consejo botánico de utilidad, nunca con peticiones de interacción.
 
-DIRECTIVAS VISUALES Y PROMPTS DE VIDEO [VIDEO GENERATION PROMPT]:
-- Formato 9:16 vertical cinematográfico.
-- La imagen debe MOSTRAR EXACTAMENTE LO QUE LA VOZ ESTÁ ENSEÑANDO: Demostración práctica real (ej: dedos apretando tierra para ver si drena, hojas secas cubriendo una raíz, agua penetrando en sustrato esponjoso vs charco en tierra dura).
-- Fotografía macro hiperrealista, colores vivos naturales, cámara lenta cinematográfica suave, textura táctil orgánica.
+DIRECTIVAS VISUALES Y PROMPTS DE VIDEO [VIDEO GENERATION PROMPT] - BLINDAJE DE REALISMO 100% CERO MAGIA:
+- Formato 9:16 vertical cinematográfico, iluminación natural realista.
+- FÍSICA Y REALISMO ESTRICTO (PROHIBIDO EFECTOS MÁGICOS O INVENTOS DE IA):
+  * PROHIBIDO que aparezcan frutas, vegetales o plantas "de la nada", "brotando mágicamente de la mano" o apareciendo en el aire sin contexto.
+  * Todas las plantas, frutos y hojas deben estar físicamente enraizadas en su maceta, sustrato o jardinera, o ser sostenidas de forma 100% natural y verosímil por manos humanas reales.
+  * Manos humanas con anatomía perfecta (5 dedos proporcionados, movimientos pausados, creíbles y reales).
+  * Sin mutaciones botánicas ni frutas gigantescas desproporcionadas. Escala realista de huerto urbano hogareño.
+- En la Escena 1, el prompt visual DEBE comenzar describiendo la ACCIÓN MAGNÉTICA DE HOOK (primeros 3 segundos).
 
-MANUAL DE IDENTIDAD Y LÍNEA GRÁFICA EDITORIAL MR. GREEN (Infografías):
+MANUAL DE IDENTIDAD EDITORIAL MR. GREEN (Infografías / Posts):
 - Formato: Infografía vertical 3:4 pedagógica de alto valor visual para Facebook Feed.
 - Fondo: Papel botánico kraft texturizado cálido y limpio (#F4EBD9).
 - Paleta: Verde bosque profundo (#1B4332), tonos tierra/marrón orgánico y blanco hueso para máxima legibilidad.
 - Cabecera: Logotipo 'Mr. Green 🌿' sutil en esquina superior derecha.
-- Prohibición Total: NUNCA incluir texto de categorías internas ("Pilar", "Pilar 1", "Pilar 2", "Ángulo A"), ni términos técnicos de IA ("Nano Banana", "Prompt", etc.). Cero texto en inglés.
-- Todo texto visible (título, flechas, llamadas de atención, consejos) DEBE SER 100% EN ESPAÑOL NEUTRO.
-- Diagrama central: Ilustración didáctica o fotografía macro con comparaciones claras ("Paso a paso", "Suelo sano vs Suelo duro").
-- Copy de la imagen: Pregunta interactiva para despertar debate y llamada clara a guardar el post.
+- Prohibición Total: NUNCA incluir texto de categorías internas ("Pilar", "Ángulo"), ni términos de IA o cámaras. Cero inglés.
+- Todo texto visible DEBE SER 100% EN ESPAÑOL NEUTRO.
+- Diagrama central: Ilustración o foto didáctica con el paso a paso botánico.
 
 ESTRUCTURA EXACTA REQUERIDA EN CADA ESCENA:
 [SCENE SPECIFICATIONS]
 Duration: 8.0 seconds exact (00:00 - 00:08)
 Format: 9:16 vertical
-Atmosphere: [Luz natural y entorno]
-Visual Palette: [Colores orgánicos y texturas naturales]
+Atmosphere: [Luz natural realista en balcón, terraza o cocina soleada]
+Visual Palette: [Colores orgánicos, verdes vivos, rojos naturales de fruto, tonos tierra]
 [ON-SCREEN MOTION GRAPHIC]
-Time: [00:00.2 a 00:02.8 en Escena 1 con título didáctico en español / None en Escena 2 y 3] | Text: [Texto corto en mayúsculas en español] | Style: Tipografía limpia, blanca y legible sobre fondo natural
+Time: [00:00.2 a 00:02.8 en Escena 1 con gancho en español / None en Escena 2 y 3] | Text: [Texto gancho corto en mayúsculas en español] | Style: Tipografía limpia, blanca y legible sobre fondo natural
 [AUDIO & SOUND DESIGN]
-SFX Hook / Transition: [Efecto sonoro nítido y placentero] | Background Music: Música acústica inspiradora o violonchelo envolvente | SFX Ambience / Action: Sonidos táctiles orgánicos (tierra crujiendo, gotas, hojas)
+SFX Hook / Transition: None (transición acústica natural sin swooshes metálicos ni artefactos digitales) | Background Music: Guitarra acústica suave o ambiente natural de balcón al amanecer | SFX Ambience / Action: Sonidos 100% orgánicos (crujido de tierra, brisa suave en hojas, agua en regadera)
 [VOICE DIRECTIVE]
-Speaker Persona: Narrador documental estilo BBC Earth moderno (David Attenborough en español neutro con ritmo ágil), tono barítono profundo, sabio pero con energía dinámica y cautivadora (130-135 wpm), cero pausas lentas ni silencios aburridos, explicando la naturaleza de forma fascinante para un niño de 11 años.
+Speaker Persona: Mentor de huertos urbanos en español neutro, voz cálida, didáctica, confiable y con ritmo ágil, hablando de tú a tú al aficionado urbano.
 [VOICE SCRIPT]
-"[Guion educativo de 11 a 15 palabras en español que enseña un concepto directo]"
+"[Guion educativo de 13 a 18 palabras en español que enseña el concepto directo y termina con valor, sin CTA]"
 [VIDEO GENERATION PROMPT]
-Lente macro 85mm o 50mm, f/2.8, 9:16 vertical. [Acción visual explicativa que demuestra la lección]. Demostración clara, movimiento lento cinematográfico, BBC nature documentary style, nitidez 4K.
+Toma vertical 9:16 cinematográfica con luz natural realista. [Acción visual explicativa con Hook inmediato que demuestra la lección botánica en entorno urbano real]. Demostración clara, movimiento suave, nitidez fotográfica natural.
 
 FORMATO DE SALIDA: JSON estricto con:
 {
@@ -160,17 +194,18 @@ FORMATO DE SALIDA: JSON estricto con:
   "pilar": "${item.pilar}",
   "angulo": "${item.angulo}",
   "clima_luz": "${item.luz}",
-  "copy_text": "🌱 ¿SABÍAS ESTO DE TUS PLANTAS? Explicación sencilla en 2 líneas. El truco práctico para aplicar hoy. Guarda este video 📌 y cuéntanos si lo sabías 👇 #MrGreen #PlantasEnCasa #AprendeBotanica",
-  "hashtags": ["#MrGreen", "#PlantasEnCasa", "#HuertoUrbano", "#TipsDeJardineria"],
+  "copy_text": "🌱 [Gancho sobre huerto urbano]. Explicación clara en 2 líneas. El tip práctico aplicable en maceta o balcón. #MrGreen #HuertoUrbano #PlantasEnCasa #HuertoEnMacetas",
+  "hashtags": ["#MrGreen", "#HuertoUrbano", "#HuertoEnCasa", "#TomatesEnMaceta", "#Microgreens"],
   "scene_1_prompt": "...",
   "scene_2_prompt": "...",
   "scene_3_prompt": "...",
-  "image_prompt": "Infografía botánica explicativa en español con Nano Banana 2.1, ratio vertical 3:4. Diagrama educativo paso a paso con flechas y etiquetas en español: [detalle del diagrama]. Fondo orgánico limpio, estética didáctica moderna, 100% texto en español, sutil marca 'Mr. Green'.",
-  "image_copy_text": "📌 GUÍA RÁPIDA: Guarda esta infografía para no olvidar este consejo en tu jardín o maceta. ¿Cuál es tu experiencia? Déjamelo en los comentarios 👇 #MrGreen #HuertoEnCasa"
+  "image_prompt": "Infografía botánica explicativa en español, ratio vertical 3:4. Diagrama educativo paso a paso con flechas y etiquetas en español: [detalle del diagrama práctico para terraza o cocina]. Fondo orgánico limpio, estética didáctica moderna, 100% texto en español, sutil marca 'Mr. Green'.",
+  "image_copy_text": "📌 GUÍA RÁPIDA: Consejo práctico para aplicar en tus macetas o terraza. #MrGreen #HuertoUrbano #JardineriaEnCasa"
 }
 `;
 
-    const userPrompt = `Genera un video completamente nuevo y original sobre ${item.pilar}.
+    const cropPromptText = item.cropHint ? ` Enfocado específicamente en: ${item.cropHint}.` : '';
+    const userPrompt = `Genera un video completamente nuevo y original sobre ${item.pilar}.${cropPromptText}
 TÍTULOS QUE NO PUEDES REPETIR BAJO NINGUNA CIRCUNSTANCIA:
 ${blacklist.slice(-40).join(', ')}`;
 

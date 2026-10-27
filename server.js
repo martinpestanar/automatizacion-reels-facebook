@@ -140,10 +140,16 @@ app.post('/api/accounts/login', async (req, res) => {
 // ─── Generación de Cards para Content Vault ───────────────────────────────────
 app.post('/api/vault/generate', async (req, res) => {
   const count = parseInt(req.body?.count, 10) || 10;
+  const pilar = req.body?.pilar || null;
+  const focusCrops = Array.isArray(req.body?.focusCrops) ? req.body.focusCrops : null;
+
   try {
     console.log(`🎨 Petición recibida para generar ${count} cards en el Vault...`);
-    generateVaultBatch(count).catch(err => console.error('[Vault API Async Error]', err.message));
-    res.json({ success: true, message: `Generación de ${count} cards iniciada en segundo plano.` });
+    if (pilar) console.log(`   Pilar: ${pilar}`);
+    if (focusCrops) console.log(`   Cultivos: ${focusCrops.join(', ')}`);
+
+    generateVaultBatch(count, { pilar, focusCrops }).catch(err => console.error('[Vault API Async Error]', err.message));
+    res.json({ success: true, message: `Generación de ${count} cards iniciada con éxito.` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
