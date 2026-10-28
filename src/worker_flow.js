@@ -490,15 +490,30 @@ async function generateScene(page, sc, job, tempDir, downloadedClips, report, ba
   }
   await page.waitForTimeout(2000);
 
-  // Botón Descargar en la barra de la tarjeta seleccionada
+  // Botón Descargar en la barra de la tarjeta seleccionada con reintento si el menú desplegable no aparece
   const dlBtn = page.locator('button[aria-label*="Descargar" i], button[aria-label*="Download" i]').first();
   await dlBtn.waitFor({ state: 'visible', timeout: 25000 });
-  await dlBtn.click({ force: true });
-  await page.waitForTimeout(1000);
 
-  // Seleccionar la opción de descarga: Para VIDEO apuntar con selector estricto de filtro a '720p' para obtener el archivo .mp4 nativo con audio AAC
   const downloadOption = page.locator('.cdk-overlay-container [role="menuitem"]').filter({ hasText: '720p' }).first();
-  await downloadOption.waitFor({ state: 'visible', timeout: 15000 });
+  let menuOpened = false;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await dlBtn.click({ force: true });
+    await page.waitForTimeout(1000);
+    try {
+      await downloadOption.waitFor({ state: 'visible', timeout: 5000 });
+      menuOpened = true;
+      break;
+    } catch {
+      console.log(`⚠️ Menú 720p no visible en intento ${attempt}/3, reintentando clic en botón descargar...`);
+      await page.waitForTimeout(1000);
+    }
+  }
+
+  if (!menuOpened) {
+    // Si todavía no abre, esperar con timeout de gracia
+    await downloadOption.waitFor({ state: 'visible', timeout: 15000 });
+  }
 
   const clipPath = path.join(tempDir, `clip_${job.id}_s${sc.num}.mp4`);
   console.log(`📥 Descargando Escena ${sc.num}...`);
