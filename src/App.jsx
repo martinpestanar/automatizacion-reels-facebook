@@ -84,6 +84,11 @@ export default function App() {
   const [vaultGenCrops, setVaultGenCrops] = useState(['Tomates en maceta', 'Fresas en balcón']);
   const [vaultGenCount, setVaultGenCount] = useState(10);
   const [customCropInput, setCustomCropInput] = useState('');
+  const [vaultCustomInstructions, setVaultCustomInstructions] = useState(localStorage.getItem('vaultCustomInstructions') || '');
+  const [vaultTonePreset, setVaultTonePreset] = useState('default');
+  const [isAdvancedPromptOpen, setIsAdvancedPromptOpen] = useState(false);
+  const [vaultSystemPromptOverride, setVaultSystemPromptOverride] = useState(localStorage.getItem('vaultSystemPromptOverride') || '');
+  const [defaultPromptTemplate, setDefaultPromptTemplate] = useState('');
 
   // Parámetros de Generación estilo Google Flow (Video & Imagen)
   const [publishingMode, setPublishingMode] = useState(localStorage.getItem('publishingMode') || 'manual'); // 'manual' (revisar antes de publicar) | 'auto' (publicar directo al terminar render)
@@ -2078,7 +2083,16 @@ export default function App() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <button
                         type="button"
-                        onClick={() => setIsVaultGeneratorOpen(true)}
+                        onClick={async () => {
+                          setIsVaultGeneratorOpen(true);
+                          if (!defaultPromptTemplate) {
+                            try {
+                              const res = await fetch('http://localhost:3001/api/vault/prompt-template');
+                              const data = await res.json();
+                              if (data.defaultPrompt) setDefaultPromptTemplate(data.defaultPrompt);
+                            } catch (e) {}
+                          }
+                        }}
                         disabled={isGenerating}
                         className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white text-xs font-bold cursor-pointer shadow-xs transition disabled:opacity-50"
                         title="Personaliza pilares y cultivos para que el Agente IA genere cards maestras para el Banco"
@@ -4404,10 +4418,141 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Presets de Tono y Estilo Editorial */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5 flex items-center justify-between">
+                  <span>3. Tono & Estilo del Mentor</span>
+                  <span className="text-[11px] text-teal-400 font-normal">Presets Rápidos</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {[
+                    { id: 'default', label: '🌿 Orgánico Didáctico', prompt: '' },
+                    { id: 'hacks', label: '⚡ Hacks Cero Costo', prompt: 'Enfoque en trucos caseros con materiales reciclados del hogar, económicos y sin gastar un centavo.' },
+                    { id: 'mythbusters', label: '💥 Rompe-Mitos', prompt: 'Tono revelador y contraintuitivo: desmiente errores típicos que la gente cree verdades al sembrar en maceta.' },
+                    { id: 'urgent', label: '🚨 Diagnóstico Urgente', prompt: 'Tono de alerta temprana y solución inmediata para salvar plantas o cosechas en peligro.' }
+                  ].map((preset) => {
+                    const isSelected = vaultTonePreset === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => {
+                          setVaultTonePreset(preset.id);
+                          if (preset.prompt) {
+                            setVaultCustomInstructions(preset.prompt);
+                            localStorage.setItem('vaultCustomInstructions', preset.prompt);
+                          } else {
+                            setVaultCustomInstructions('');
+                            localStorage.removeItem('vaultCustomInstructions');
+                          }
+                        }}
+                        className={`px-2.5 py-2 rounded-xl text-[11px] font-bold text-center transition cursor-pointer border ${
+                          isSelected
+                            ? 'bg-teal-500/20 border-teal-400 text-teal-300 shadow-sm'
+                            : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-750'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Instrucción Personalizada / Enfoque Libre */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                    4. Instrucciones Específicas / Prompt del Director (Opcional)
+                  </label>
+                  {vaultCustomInstructions && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVaultCustomInstructions('');
+                        localStorage.removeItem('vaultCustomInstructions');
+                        setVaultTonePreset('default');
+                      }}
+                      className="text-[10px] text-rose-400 hover:underline cursor-pointer"
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  rows={2}
+                  value={vaultCustomInstructions}
+                  onChange={(e) => {
+                    setVaultCustomInstructions(e.target.value);
+                    localStorage.setItem('vaultCustomInstructions', e.target.value);
+                  }}
+                  placeholder="Ej: Haz énfasis en macetas pequeñas sin drenaje, o dale un gancho que despierte mucha intriga sobre el riego nocturno..."
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-emerald-500 shadow-inner resize-none"
+                />
+              </div>
+
+              {/* Desplegable Avanzado: Control Total del System Prompt Maestro */}
+              <div className="border border-slate-800 rounded-2xl p-3 bg-slate-950/40">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAdvancedPromptOpen(!isAdvancedPromptOpen);
+                      if (!vaultSystemPromptOverride && defaultPromptTemplate) {
+                        setVaultSystemPromptOverride(defaultPromptTemplate);
+                      }
+                    }}
+                    className="flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-white cursor-pointer transition"
+                  >
+                    <span>{isAdvancedPromptOpen ? '▼' : '▶'}</span>
+                    <span>🛠️ Modo Director Experto: Editar System Prompt Maestro</span>
+                  </button>
+                  {vaultSystemPromptOverride && (
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                      Personalizado Activo
+                    </span>
+                  )}
+                </div>
+
+                {isAdvancedPromptOpen && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[11px] text-slate-400 leading-normal">
+                      Aquí puedes modificar las reglas botánicas, estructura de escenas (8s c/u), tiempos del gancho o fórmulas visuales.
+                      Tokens soportados: <code className="text-emerald-400">{'{{pilar}}'}</code>, <code className="text-emerald-400">{'{{angulo}}'}</code>, <code className="text-emerald-400">{'{{luz}}'}</code>, <code className="text-emerald-400">{'{{cropDirective}}'}</code>, <code className="text-emerald-400">{'{{customInstructions}}'}</code>.
+                    </p>
+                    <textarea
+                      rows={8}
+                      value={vaultSystemPromptOverride || defaultPromptTemplate}
+                      onChange={(e) => {
+                        setVaultSystemPromptOverride(e.target.value);
+                        localStorage.setItem('vaultSystemPromptOverride', e.target.value);
+                      }}
+                      className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 font-mono text-[11px] text-slate-200 focus:outline-emerald-500 shadow-inner leading-relaxed"
+                    />
+                    <div className="flex items-center justify-between pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVaultSystemPromptOverride('');
+                          localStorage.removeItem('vaultSystemPromptOverride');
+                          showToast('System Prompt restablecido a la versión por defecto de Mr. Green.');
+                        }}
+                        className="text-xs text-rose-400 hover:text-rose-300 cursor-pointer font-semibold transition"
+                      >
+                        ↺ Restablecer al Prompt Original de Mr. Green
+                      </button>
+                      <span className="text-[10px] text-slate-500">
+                        {vaultSystemPromptOverride ? 'Se guardó en tu navegador' : 'Usando predeterminado'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Cantidad de cards */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  3. Cantidad de Cards a Generar
+                  5. Cantidad de Cards a Generar
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {[3, 5, 10].map((num) => (
@@ -4447,7 +4592,7 @@ export default function App() {
                 disabled={isGenerating}
                 onClick={async () => {
                   setIsVaultGeneratorOpen(false);
-                  showToast(`🤖 Solicitando al Agente IA lote de ${vaultGenCount} cards con foco en tus cultivos...`);
+                  showToast(`🤖 Solicitando al Agente IA lote de ${vaultGenCount} cards con foco en tus directivas...`);
                   setIsGenerating(true);
                   try {
                     const res = await fetch('http://localhost:3001/api/vault/generate', {
@@ -4456,12 +4601,14 @@ export default function App() {
                       body: JSON.stringify({
                         count: vaultGenCount,
                         pilar: vaultGenPilar || null,
-                        focusCrops: vaultGenCrops
+                        focusCrops: vaultGenCrops,
+                        customInstructions: vaultCustomInstructions || null,
+                        systemPromptOverride: vaultSystemPromptOverride || null
                       })
                     });
                     const data = await res.json();
                     if (data.error) throw new Error(data.error);
-                    showToast(`🎉 ¡Generación de ${vaultGenCount} cards iniciada! Aparecerán en tu Banco en unos momentos...`);
+                    showToast(`🎉 ¡Generación de ${vaultGenCount} cards iniciada con tus instrucciones personalizadas!`);
                   } catch (e) {
                     showToast('Error conectando con el motor: ' + e.message);
                   } finally {
