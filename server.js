@@ -138,17 +138,29 @@ app.post('/api/accounts/login', async (req, res) => {
 
 
 // ─── Generación de Cards para Content Vault ───────────────────────────────────
+app.get('/api/vault/prompt-template', (req, res) => {
+  import('./src/generator/vault_generator_24s.js').then(mod => {
+    res.json({ success: true, defaultPrompt: mod.DEFAULT_VAULT_SYSTEM_PROMPT });
+  }).catch(err => {
+    res.status(500).json({ error: err.message });
+  });
+});
+
 app.post('/api/vault/generate', async (req, res) => {
   const count = parseInt(req.body?.count, 10) || 10;
   const pilar = req.body?.pilar || null;
   const focusCrops = Array.isArray(req.body?.focusCrops) ? req.body.focusCrops : null;
+  const customInstructions = req.body?.customInstructions || null;
+  const systemPromptOverride = req.body?.systemPromptOverride || null;
 
   try {
     console.log(`🎨 Petición recibida para generar ${count} cards en el Vault...`);
     if (pilar) console.log(`   Pilar: ${pilar}`);
     if (focusCrops) console.log(`   Cultivos: ${focusCrops.join(', ')}`);
+    if (customInstructions) console.log(`   Instrucción personalizada: "${customInstructions}"`);
+    if (systemPromptOverride) console.log(`   Prompt maestro personalizado activado.`);
 
-    generateVaultBatch(count, { pilar, focusCrops }).catch(err => console.error('[Vault API Async Error]', err.message));
+    generateVaultBatch(count, { pilar, focusCrops, customInstructions, systemPromptOverride }).catch(err => console.error('[Vault API Async Error]', err.message));
     res.json({ success: true, message: `Generación de ${count} cards iniciada con éxito.` });
   } catch (err) {
     res.status(500).json({ error: err.message });

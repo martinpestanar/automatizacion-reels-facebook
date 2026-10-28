@@ -27,103 +27,16 @@ const LUCES = [
   'L3: Luz Dorada de Tarde en Balcón Urbano'
 ];
 
-/**
- * Llamada directa a Google Gemini (Gratis, tier oficial)
- */
-async function callGemini(systemInstruction, userPrompt) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
-
-  const payload = {
-    system_instruction: {
-      parts: [{ text: systemInstruction }]
-    },
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: userPrompt }]
-      }
-    ],
-    generationConfig: {
-      temperature: 0.7,
-      responseMimeType: 'application/json'
-    }
-  };
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Respuesta vacía de Gemini');
-
-  return JSON.parse(text);
-}
-
-/**
- * Genera un lote de cards de contenido ultra-realistas (24s / 3 escenas)
- * usando la API Gratuita de Google Gemini.
- * Soporta personalización temática de Pilares y Enfoques de Cultivos.
- */
-export async function generateVaultBatch(targetCount = 10, options = {}) {
-  const selectedPilar = options.pilar || null;
-  const focusCrops = Array.isArray(options.focusCrops) && options.focusCrops.length > 0 ? options.focusCrops : null;
-
-  console.log(`\n🌱 [VaultGenerator: Google Gemini] Iniciando generación de ${targetCount} cards maestras para Mr. Green...`);
-  if (selectedPilar) console.log(`📌 Pilar seleccionado: "${selectedPilar}"`);
-  if (focusCrops) console.log(`🥦 Cultivos / Temas específicos: [${focusCrops.join(', ')}]`);
-
-  // 1. Obtener títulos existentes en video_jobs y content_vault para no repetir
-  const { data: existingJobs } = await supabase.from('video_jobs').select('title');
-  const { data: existingVault } = await supabase.from('content_vault').select('title');
-
-  const blacklist = [
-    ...(existingJobs || []).map(j => j.title),
-    ...(existingVault || []).map(v => v.title)
-  ].filter(Boolean);
-
-  console.log(`📋 [VaultGenerator] Temas excluidos (ya realizados): ${blacklist.length} títulos.`);
-
-  // 2. Construir la distribución de pilares y ángulos
-  const distribution = [];
-  for (let i = 0; i < targetCount; i++) {
-    const pilar = selectedPilar || PILARES[i % PILARES.length];
-    const anguloIndex = i % ANGULOS.length;
-    const luzIndex = i % LUCES.length;
-    const cropHint = focusCrops ? focusCrops[i % focusCrops.length] : null;
-
-    distribution.push({
-      pilar,
-      angulo: ANGULOS[anguloIndex],
-      luz: LUCES[luzIndex],
-      cropHint
-    });
-  }
-
-  const generatedCards = [];
-
-  for (let i = 0; i < distribution.length; i++) {
-    const item = distribution[i];
-    console.log(`\n✍️ Generando Card ${i + 1}/${targetCount} con Gemini -> [${item.pilar}] (${item.angulo})${item.cropHint ? ` [Enfoque: ${item.cropHint}]` : ''}...`);
-
-    const cropDirective = item.cropHint
-      ? `\n- CULTIVO O ENFOQUE PRIORITARIO OBLIGATORIO: Esta card debe estar enfocada exclusivamente en: "${item.cropHint}".`
-      : (focusCrops ? `\n- CULTIVOS PRIORITARIOS: Enfocar la card en uno de los siguientes: ${focusCrops.join(', ')}.` : '');
-
-    const systemInstruction = `
+export const DEFAULT_VAULT_SYSTEM_PROMPT = `
 Eres el Director de Contenido Educativo y Divulgación de Huertos Urbanos y Jardinería de "Mr. Green".
 Tu misión es crear videos de 24 segundos exactos (3 escenas de 8.0s) pensados para aficionados a los huertos en casa, balcones, terrazas y pequeños espacios.
 El contenido debe ser 100% REALISTA (cosechas viables en maceta, variedades de tomates, fresas, limoneros, papas en saco o bolsa, lechugas, albahaca, microgreens en cocina o kokedamas de aromáticas), con alta atracción visual pero sin fantasías ni promesas irreales.
 TODO EL CONTENIDO Y TEXTOS DEBEN ESTAR EN ESPAÑOL NEUTRO.
 
 PARÁMETROS ASIGNADOS:
-- Pilar: ${item.pilar}
-- Ángulo: ${item.angulo}
-- Clima y Luz: ${item.luz}${cropDirective}
+- Pilar: {{pilar}}
+- Ángulo: {{angulo}}
+- Clima y Luz: {{luz}}{{cropDirective}}{{customInstructions}}
 
 ARQUITECTURA DE RETENCIÓN DE 3 ESCENAS (MÁXIMO GANCHO VISUAL):
 - ESCENA 1 (EL VISUAL HOOK DE LOS PRIMEROS 3 SEGUNDOS - CRÍTICO):
@@ -191,9 +104,9 @@ Toma vertical 9:16 cinematográfica con luz natural realista. [Acción visual ex
 FORMATO DE SALIDA: JSON estricto con:
 {
   "title": "Título educativo y atractivo en español",
-  "pilar": "${item.pilar}",
-  "angulo": "${item.angulo}",
-  "clima_luz": "${item.luz}",
+  "pilar": "{{pilar}}",
+  "angulo": "{{angulo}}",
+  "clima_luz": "{{luz}}",
   "copy_text": "🌱 [Gancho sobre huerto urbano]. Explicación clara en 2 líneas. El tip práctico aplicable en maceta o balcón. #MrGreen #HuertoUrbano #PlantasEnCasa #HuertoEnMacetas",
   "hashtags": ["#MrGreen", "#HuertoUrbano", "#HuertoEnCasa", "#TomatesEnMaceta", "#Microgreens"],
   "scene_1_prompt": "...",
@@ -203,6 +116,113 @@ FORMATO DE SALIDA: JSON estricto con:
   "image_copy_text": "📌 GUÍA RÁPIDA: Consejo práctico para aplicar en tus macetas o terraza. #MrGreen #HuertoUrbano #JardineriaEnCasa"
 }
 `;
+
+/**
+ * Llamada directa a Google Gemini (Gratis, tier oficial)
+ */
+async function callGemini(systemInstruction, userPrompt) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
+
+  const payload = {
+    system_instruction: {
+      parts: [{ text: systemInstruction }]
+    },
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: userPrompt }]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.7,
+      responseMimeType: 'application/json'
+    }
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Respuesta vacía de Gemini');
+
+  return JSON.parse(text);
+}
+
+/**
+ * Genera un lote de cards de contenido ultra-realistas (24s / 3 escenas)
+ * usando la API Gratuita de Google Gemini.
+ * Soporta personalización temática de Pilares y Enfoques de Cultivos.
+ */
+export async function generateVaultBatch(targetCount = 10, options = {}) {
+  const selectedPilar = options.pilar || null;
+  const focusCrops = Array.isArray(options.focusCrops) && options.focusCrops.length > 0 ? options.focusCrops : null;
+  const customInstructions = options.customInstructions ? String(options.customInstructions).trim() : null;
+  const systemPromptTemplate = options.systemPromptOverride ? String(options.systemPromptOverride).trim() : DEFAULT_VAULT_SYSTEM_PROMPT;
+
+  console.log(`\n🌱 [VaultGenerator: Google Gemini] Iniciando generación de ${targetCount} cards maestras para Mr. Green...`);
+  if (selectedPilar) console.log(`📌 Pilar seleccionado: "${selectedPilar}"`);
+  if (focusCrops) console.log(`🥦 Cultivos / Temas específicos: [${focusCrops.join(', ')}]`);
+  if (customInstructions) console.log(`🎯 Instrucción personalizada inyectada: "${customInstructions}"`);
+  if (options.systemPromptOverride) console.log(`⚙️ Se está usando un System Prompt personalizado.`);
+
+  // 1. Obtener títulos existentes en video_jobs y content_vault para no repetir
+  const { data: existingJobs } = await supabase.from('video_jobs').select('title');
+  const { data: existingVault } = await supabase.from('content_vault').select('title');
+
+  const blacklist = [
+    ...(existingJobs || []).map(j => j.title),
+    ...(existingVault || []).map(v => v.title)
+  ].filter(Boolean);
+
+  console.log(`📋 [VaultGenerator] Temas excluidos (ya realizados): ${blacklist.length} títulos.`);
+
+  // 2. Construir la distribución de pilares y ángulos
+  const distribution = [];
+  for (let i = 0; i < targetCount; i++) {
+    const pilar = selectedPilar || PILARES[i % PILARES.length];
+    const anguloIndex = i % ANGULOS.length;
+    const luzIndex = i % LUCES.length;
+    const cropHint = focusCrops ? focusCrops[i % focusCrops.length] : null;
+
+    distribution.push({
+      pilar,
+      angulo: ANGULOS[anguloIndex],
+      luz: LUCES[luzIndex],
+      cropHint
+    });
+  }
+
+  const generatedCards = [];
+
+  for (let i = 0; i < distribution.length; i++) {
+    const item = distribution[i];
+    console.log(`\n✍️ Generando Card ${i + 1}/${targetCount} con Gemini -> [${item.pilar}] (${item.angulo})${item.cropHint ? ` [Enfoque: ${item.cropHint}]` : ''}...`);
+
+    const cropDirective = item.cropHint
+      ? `\n- CULTIVO O ENFOQUE PRIORITARIO OBLIGATORIO: Esta card debe estar enfocada exclusivamente en: "${item.cropHint}".`
+      : (focusCrops ? `\n- CULTIVOS PRIORITARIOS: Enfocar la card en uno de los siguientes: ${focusCrops.join(', ')}.` : '');
+
+    const customDirective = customInstructions
+      ? `\n- INSTRUCCIONES ESPECÍFICAS Y PERSONALIZADAS DEL DIRECTOR (PRIORIDAD ALTA): ${customInstructions}`
+      : '';
+
+    // Interpolación del prompt del sistema (soporta tokens {{pilar}}, {{angulo}}, {{luz}}, etc.)
+    const systemInstruction = systemPromptTemplate
+      .replace(/\{\{pilar\}\}/g, item.pilar)
+      .replace(/\{\{angulo\}\}/g, item.angulo)
+      .replace(/\{\{luz\}\}/g, item.luz)
+      .replace(/\{\{cropDirective\}\}/g, cropDirective)
+      .replace(/\{\{customInstructions\}\}/g, customDirective)
+      // En caso de que el usuario haya editado sin usar tokens y tenga interpolaciones directas:
+      .replace(/\$\{item\.pilar\}/g, item.pilar)
+      .replace(/\$\{item\.angulo\}/g, item.angulo)
+      .replace(/\$\{item\.luz\}/g, item.luz);
 
     const cropPromptText = item.cropHint ? ` Enfocado específicamente en: ${item.cropHint}.` : '';
     const userPrompt = `Genera un video completamente nuevo y original sobre ${item.pilar}.${cropPromptText}
